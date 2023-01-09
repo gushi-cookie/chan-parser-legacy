@@ -6,12 +6,12 @@ module.exports = class EntryPointTODO {
     };
 
     start() {
-        this.threadsObserverService.startObserve();
-        this.threadsObserverService.startThreadsUpdater();
+        this.threadsObserverService.startCatalogObserver();
+        this.threadsObserverService.startThreadUpdater();
     };
 
     stop() {
-        this.threadsObserverService.stopObserve();
-        this.threadsObserverService.stopThreadsUpdater();
+        this.threadsObserverService.stopThreadUpdater();
+        this.threadsObserverService.stopCatalogObserver();
     };
 };

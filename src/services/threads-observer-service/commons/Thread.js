@@ -1,14 +1,16 @@
 const Post = require('./Post');
 
 module.exports = class Thread {
-    constructor(number, title, board, postersCount, viewsCount, posts, createTimestamp) {
+    constructor(number, title, board, postersCount, posts, createTimestamp, viewsCount, lastPostTimestamp) {
         this.number = number;
         this.title = title;
         this.board = board;
         this.postersCount = postersCount;
-        this.viewsCount = viewsCount;
-        this.posts = posts;
         this.createTimestamp = createTimestamp;
+        this.posts = posts;
+        this.viewsCount = viewsCount;
+        this.lastPostTimestamp = lastPostTimestamp;
+        this.isDeleted = false;
     };
 
 
@@ -23,7 +25,7 @@ module.exports = class Thread {
     };
 
 
-    static parseFrom2chJson(obj, viewsCount = 0, createTimestamp = 0) {
+    static parseFrom2chJson(obj) {
         let posts = [];
         if(obj.threads[0].posts !== null) {
             obj.threads[0].posts.forEach((item) => {
@@ -31,10 +33,12 @@ module.exports = class Thread {
             });
         }
 
-        return new Thread(obj.current_thread, obj.title, obj.board.id, obj.unique_posters, viewsCount, posts, createTimestamp);
+        return new Thread(obj.current_thread, obj.title, obj.board.id, obj.unique_posters, posts, posts[0].createTimestamp, 0, posts[posts.length-1].createTimestamp);
     };
 
     static parseFrom4chanJson(obj) {
         // TO-DO
     };
+
+    static 
 };
