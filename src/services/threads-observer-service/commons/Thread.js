@@ -24,6 +24,53 @@ module.exports = class Thread {
         return result;
     };
 
+    static diffThreads(thread1, thread2) {
+        if(!(thread1 instanceof Thread) || !(thread2 instanceof Thread)) {
+            return null;
+        } else if(thread1 === thread2) {
+            return {fields: [], postsDiff: null};
+        }
+
+        let result = {
+            fields: [],
+            postsDiff: null,
+        };
+
+        if(thread1.number !== thread2.number) {
+            result.fields.push('number');
+        }
+        if(thread1.title !== thread2.title) {
+            result.fields.push('title');
+        }
+        if(thread1.board !== thread2.board) {
+            result.fields.push('board');
+        }
+        if(thread1.postersCount !== thread2.postersCount) {
+            result.fields.push('postersCount');
+        }
+        if(thread1.createTimestamp !== thread2.createTimestamp) {
+            result.fields.push('createTimestamp');
+        }
+        if(thread1.viewsCount !== thread2.viewsCount) {
+            result.fields.push('viewsCount');
+        }
+        if(thread1.lastPostTimestamp !== thread2.lastPostTimestamp) {
+            result.fields.push('lastPostTimestamp');
+        }
+        if(thread1.isDeleted !== thread2.isDeleted) {
+            result.fields.push('isDeleted');
+        }
+
+        let diffResult = Post.diffPostArrays(thread1.posts, thread2.posts);
+        if(diffResult.postsWithoutPair1.length > 0 ||
+           diffResult.postsWithoutPair2.length > 0 ||
+           diffResult.differences.length > 0) {
+            result.postsDiff = diffResult;
+            result.fields.push('posts');
+        }
+
+        return result;
+    };
 
     static parseFrom2chJson(obj) {
         let posts = [];
@@ -39,6 +86,4 @@ module.exports = class Thread {
     static parseFrom4chanJson(obj) {
         // TO-DO
     };
-
-    static 
 };

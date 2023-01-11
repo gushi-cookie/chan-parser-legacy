@@ -227,7 +227,11 @@ module.exports = class ThreadsObserverService extends EventEmitter {
 
             if(storedThread instanceof Thread) {
                 if(fetchedThread instanceof Thread) {
-                    // check both
+                    // check both threads
+                    let diff = Thread.diffThreads(storedThread, fetchedThread);
+                    if(diff.fields.includes('')) {
+
+                    }
                 } else if(fetchedThread === 404) {
                     // thread deleted from board
                     this.circulatingQueue.splice(0, 1);
@@ -239,8 +243,12 @@ module.exports = class ThreadsObserverService extends EventEmitter {
             if(storedThread instanceof CatalogThread) {
                 if(fetchedThread instanceof Thread) {
                     // new thread fetched
-                    this.threads.push(fetchedThread);
-                    this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(fetchedThread, fetchedThread.board));
+                    if(!this.getThread(fetchedThread.number)) {
+                        this.threads.push(fetchedThread);
+                        this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(fetchedThread, fetchedThread.board));
+                    } else {
+                        // TO-DO -> Log collision
+                    }
                 } else if(fetchedThread === 404) {
                     // ct nof found. remove it from queue
                     this.circulatingQueue.splice(0, 1);
