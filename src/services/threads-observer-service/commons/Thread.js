@@ -1,6 +1,31 @@
 const Post = require('./Post');
 
-module.exports = class Thread {
+
+/**
+ * @typedef {Object} ThreadsDiff
+ * @property {Thread} thread1
+ * @property {Thread} thread2
+ * @property {string[]} fields
+ * @property {PostArraysDiff} postsDiff
+ */
+
+
+/**
+ * Class representing thread data.
+ */
+class Thread {
+
+    /**
+     * Create an instance of the Thread class.
+     * @param {number} number 
+     * @param {string} title 
+     * @param {string} board 
+     * @param {number} postersCount 
+     * @param {Post[]} posts 
+     * @param {number} createTimestamp 
+     * @param {number} viewsCount 
+     * @param {number} lastPostTimestamp 
+     */
     constructor(number, title, board, postersCount, posts, createTimestamp, viewsCount, lastPostTimestamp) {
         this.number = number;
         this.title = title;
@@ -14,6 +39,10 @@ module.exports = class Thread {
     };
 
 
+    /**
+     * Computes files amount in the thread.
+     * @returns {number} Files amount.
+     */
     getFilesCount() {
         let result = 0;
 
@@ -24,42 +53,32 @@ module.exports = class Thread {
         return result;
     };
 
+
+    /**
+     * Find differences between two threads.
+     * @param {Thread} thread1 First thread
+     * @param {Thread} thread2 Second thread
+     * @returns {ThreadsDiff | null}
+     */
     static diffThreads(thread1, thread2) {
         if(!(thread1 instanceof Thread) || !(thread2 instanceof Thread)) {
             return null;
         } else if(thread1 === thread2) {
-            return {fields: [], postsDiff: null};
+            return {thread1: thread1, thread2: thread2, fields: [], postsDiff: null};
         }
 
         let result = {
+            thread1: thread1,
+            thread2: thread2,
             fields: [],
             postsDiff: null,
         };
 
-        if(thread1.number !== thread2.number) {
-            result.fields.push('number');
-        }
-        if(thread1.title !== thread2.title) {
-            result.fields.push('title');
-        }
-        if(thread1.board !== thread2.board) {
-            result.fields.push('board');
-        }
-        if(thread1.postersCount !== thread2.postersCount) {
-            result.fields.push('postersCount');
-        }
-        if(thread1.createTimestamp !== thread2.createTimestamp) {
-            result.fields.push('createTimestamp');
-        }
-        if(thread1.viewsCount !== thread2.viewsCount) {
-            result.fields.push('viewsCount');
-        }
-        if(thread1.lastPostTimestamp !== thread2.lastPostTimestamp) {
-            result.fields.push('lastPostTimestamp');
-        }
-        if(thread1.isDeleted !== thread2.isDeleted) {
-            result.fields.push('isDeleted');
-        }
+        Object.getOwnPropertyNames(thread1).forEach((name) => {
+            if(name !== 'posts' && thread1[name] !== thread2[name]) {
+                result.fields.push(name);
+            }
+        });
 
         let diffResult = Post.diffPostArrays(thread1.posts, thread2.posts);
         if(diffResult.postsWithoutPair1.length > 0 ||
@@ -72,18 +91,31 @@ module.exports = class Thread {
         return result;
     };
 
-    static parseFrom2chJson(obj) {
+
+    /**
+     * @param {*} object Parsed data object from 2ch API.
+     * @returns {Thread} New Thread instance.
+     */
+    static parseFrom2chJson(object) {
         let posts = [];
-        if(obj.threads[0].posts !== null) {
-            obj.threads[0].posts.forEach((item) => {
+        if(object.threads[0].posts !== null) {
+            object.threads[0].posts.forEach((item) => {
                 posts.push(Post.parseFrom2chJson(item));
             });
         }
 
-        return new Thread(obj.current_thread, obj.title, obj.board.id, obj.unique_posters, posts, posts[0].createTimestamp, 0, posts[posts.length-1].createTimestamp);
+        return new Thread(object.current_thread, object.title, object.board.id, object.unique_posters, posts, posts[0].createTimestamp, 0, posts[posts.length-1].createTimestamp);
     };
 
-    static parseFrom4chanJson(obj) {
+
+    /**
+     * @param {*} object Parsed data object from 4chan API.
+     * @returns {Thread} New Thread instance.
+     */
+    static parseFrom4chanJson(object) {
         // TO-DO
     };
 };
+
+
+module.exports = Thread;

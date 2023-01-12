@@ -1,4 +1,33 @@
-module.exports = class File {
+/**
+ * @typedef {Object} FilesDiff
+ * @property {File} file1
+ * @property {File} file2
+ * @property {string[]} fields
+ */
+
+/**
+ * @typedef {Object} FileArraysDiff
+ * @property {File[]} filesWithoutPair1
+ * @property {File[]} filesWithoutPair2
+ * @property {FilesDiff[]} differences
+ */
+
+
+/**
+ * Class representing file data.
+ */
+class File {
+
+    /**
+     * Create an instance of the File class.
+     * @param {string} url 
+     * @param {string} thumbnailUrl 
+     * @param {string} uploadName 
+     * @param {string} cdnName 
+     * @param {string} checkSum 
+     * 
+     * @returns {File} New file instance
+     */
     constructor(url, thumbnailUrl, uploadName, cdnName, checkSum) {
         this.url = url;
         this.thumbnailUrl = thumbnailUrl;
@@ -7,6 +36,12 @@ module.exports = class File {
         this.checkSum = checkSum;
     };
 
+
+    /**
+     * Checks if two files are equal.
+     * @param {File} anotherFile 
+     * @returns {boolean}
+     */
     equals(anotherFile) {
         if(!(anotherFile instanceof File)) {
             return false;
@@ -19,6 +54,13 @@ module.exports = class File {
                this.checkSum === anotherFile.checkSum;
     };
 
+
+    /**
+     * Checks if two File arrays are equal.
+     * @param {File[]} array1 First file array
+     * @param {File[]} array2 Second file array
+     * @returns {boolean} Compare result
+     */
     static compareFileArrays(array1, array2) {
         if(!(array1 instanceof Array) || !(array2 instanceof Array)) {
             return false;
@@ -43,6 +85,14 @@ module.exports = class File {
         return true;
     };
 
+
+    /**
+     * Find differences between two files.
+     * @param {File} file1 First file
+     * @param {File} file2 Second file
+     * 
+     * @returns {FilesDiff | null} Property names that differ
+     */
     static diffFiles(file1, file2) {
         if(!(file1 instanceof File) || !(file2 instanceof File)) {
             return null;
@@ -52,25 +102,27 @@ module.exports = class File {
 
         let fields = [];
 
-        if(file1.url !== file2.url) {
-            fields.push('url');
-        }
-        if(file1.thumbnailUrl !== file2.thumbnailUrl) {
-            fields.push('thumbnailUrl');
-        }
-        if(file1.uploadName !== file2.uploadName) {
-            fields.push('uploadName');
-        }
-        if(file1.cdnName !== file2.cdnName) {
-            fields.push('cdnName');
-        }
-        if(file1.checkSum !== file2.checkSum) {
-            fields.push('checkSum');
-        }
+        Object.getOwnPropertyNames(file1).forEach((name) => {
+            if(file1[name] !== file2[name]) {
+                fields.push(name);
+            }
+        });
 
-        return fields;
+        return {
+            file1: file1,
+            file2: file2,
+            fields: fields,
+        };
     };
 
+
+    /**
+     * Find differences between two file arrays.
+     * @param {File[]} array1 First array of files
+     * @param {File[]} array2 Second array of files
+     * 
+     * @returns {FileArraysDiff | null} 
+     */
     static diffFileArrays(array1, array2) {
         if(!(array1 instanceof Array) || !(array2 instanceof Array)) {
             return null;
@@ -83,49 +135,66 @@ module.exports = class File {
         };
 
         let pairs = [];
-        let diffFields;
+        let diff;
         array1.forEach((file1) => {
             array2.forEach((file2) => {
                 if(file1.url === file2.url) {
                     pairs.push({ file1: file1, file2: file2 });
-                    diffFields = File.diffFiles(file1, file2);
-                    if(diffFields.length > 0) {
-                        result.differences.push({
-                            file1: file1,
-                            file2: file2,
-                            fields: diffFields,
-                        });
+                    diff = File.diffFiles(file1, file2);
+                    if(diff.fields.length > 0) {
+                        result.differences.push(diff);
                     }
                 }
             });
         });
 
 
+        let pair;
         array1.forEach((file) => {
-            pairs.forEach((pair, index) => {
-                if(pairs.length-1 === index && file !== pair.file1) {
+            for(let i = 0; i < pairs.length - 1; i++) {
+                pair = pairs[i];
+
+                if(pair.file1 === file) {
+                    break;
+                } else if(pairs.length-1 === i) {
                     result.filesWithoutPair1.push(file);
                 }
-            });
+            }
         });
 
         array2.forEach((file) => {
-            pairs.forEach((pair, index) => {
-                if(pairs.length-1 === index && file !== pair.file2) {
+            for(let i = 0; i < pairs.length - 1; i++) {
+                pair = pairs[i];
+
+                if(pair.file2 === file) {
+                    break;
+                } else if(pairs.length-1 === i) {
                     result.filesWithoutPair2.push(file);
                 }
-            });
+            }
         });
 
         return result;
     };
 
 
-    static parseFrom2chJson(obj) {
-        return new File(obj.path, obj.thumbnailUrl, obj.fullname, obj.name, obj.md5);
+    /**
+     * @param {any} object Parsed data object from 2ch API.
+     * @returns {File} New File instance
+     */
+    static parseFrom2chJson(object) {
+        return new File(object.path, object.thumbnailUrl, object.fullname, object.name, object.md5);
     };
 
+
+    /**
+     * @param {any} object Parsed data object from 4chan API.
+     * @returns {File} New File instance
+     */
     static parseFrom4canJson(obj) {
         // TO-DO
     };
-}
+};
+
+
+module.exports = File;
