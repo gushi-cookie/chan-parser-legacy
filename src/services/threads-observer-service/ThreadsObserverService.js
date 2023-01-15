@@ -7,7 +7,17 @@ const ThreadDeleteEvent = require('../../events/ThreadDeleteEvent');
 const CatalogThread = require('./commons/CatalogThread');
 const EventEmitter = require('events');
 
-module.exports = class ThreadsObserverService extends EventEmitter {
+
+
+
+
+/**
+ * Class representing catalog and thread observers with event callbacks.
+ */
+class ThreadsObserverService extends EventEmitter {
+    /**
+     * Create an instance of the ThreadsObserverService class.
+     */
     constructor() {
         this.threads = [];
         this.catalogObserverTimeout = null;
@@ -21,11 +31,21 @@ module.exports = class ThreadsObserverService extends EventEmitter {
         this.threadUpdaterTimeout = null;
         this.threadUpdaterDelay = 5000;
 
+        this.imageBoard = '2ch';
         this.board = 'b';
     };
 
 
-    // Threads array interface
+
+    // ########################
+    // Thread storage interface
+    // ########################
+
+    /**
+     * Search for a stored thread with same number.
+     * @param {number} number 
+     * @returns {Thread | null}
+     */
     getThread(number) {
         for(let i = 0; i < this.threads.length; i++) {
             if(this.threads[i].number === number) {
@@ -36,130 +56,195 @@ module.exports = class ThreadsObserverService extends EventEmitter {
     };
 
 
+
+    // ############
     // Api requests
-    async fetchCatalog(board) {
-        let url = ThreadsObserverService.formCatalogUrl(board);
-        try {
-            let res = await axios.get(url);
-            if(res.headers['content-type'] === 'application/json') {
-                let data = JSON.parse(res.data);
-                return data.threads === null ? [] : data.threads;
-            } else {
-                // TO-DO Log
-                return null;
-            }
-        } catch(error) {
-            if(error.response) {
-                // The request was made and the server responded with a status code
-                // that falls out of the range of 2xx
-                return null;
-            } else if(error.request) {
-                // The request was made but no response was received
-                // `error.request` is an instance of http.ClientRequest
+    // ############
 
-                // TO-DO Log
-                return null;
-            } else {
-                // Something happened in setting up the request that triggered an Error
-
-                // TO-DO Log
-                return null;
-            }
-        }
-    };
-
-    async fetchThread(number) {
-        let url = ThreadsObserverService.formThreadUrl(number);
-        try {
-            let res = await axios.get(url);
-            
-            if(res.headers['content-type'] === 'application/json') {
-                return Thread.parseFrom2chJson(JSON.parse(res.data));
-            } else {
-                // TO-DO Log
-                return null;
-            }
-        } catch(error) {
-            if(error.response) {
-                // The request was made and the server responded with a status code
-                // that falls out of the range of 2xx
-                if(error.response.status === 404) {
-                    return 404;
-                } else {
-                    // TO-DO Log
-                    return null;
-                }
-            } else if(error.request) {
-                // The request was made but no response was received
-                // `error.request` is an instance of http.ClientRequest
-
-                // TO-DO Log
-                return null;
-            } else {
-                // Something happened in setting up the request that triggered an Error
-
-                // TO-DO Log
-                return null;
-            }
+    /**
+     * Form an url for requesting a thread.
+     * @param {string} imageBoard
+     * @param {string} board
+     * @param {number} threadNumber 
+     * @returns {string | null} String url
+     */
+    static formThreadUrl(imageBoard, board, threadNumber) {
+        if(imageBoard === '4chan') {
+            return `https://a.4cdn.org/${board}/thread/${threadNumber}.json`;
+        } else if(imageBoard === '2ch') {
+            return `https://2ch.hk/${board}/res/${threadNumber}.json`;
+        } else {
+            return null;
         }
     };
 
 
-    // Observer controls
+    /**
+     * Form an url for requesting a catalog.
+     * @param {string} imageBoard
+     * @param {string} board 
+     * @returns {string | null} String url
+     */
+    static formCatalogUrl(imageBoard, board) {
+        if(imageBoard === '4chan') {
+            return `https://a.4cdn.org/${board}/catalog.json`;
+        } else if(imageBoard === '2ch') {
+            return `https://2ch.hk/${board}/catalog.json`;
+        } else {
+            return null;
+        }
+    };
+
+
+    /**
+     * Request catalog threads for a specific board.
+     * @param {string} imageBoard
+     * @param {string} board 
+     * @returns {Promise.<CatalogThread[] | number>} Catalog threads array or 404.
+     * @throws {AxiosError | SyntaxError}
+     */
+    static async fetchCatalog(imageBoard, board) {
+        let url = ThreadsObserverService.formCatalogUrl(imageBoard, board);
+
+        let res;
+        try {
+            res = await axios.get(url);
+        } catch(error) {
+            if(error.response && error.response.status === 404) {
+                return 404;
+            } else {
+                throw error;
+            }
+        }
+
+        if(res.headers['content-type'] === 'application/json') {
+            let data = JSON.parse(res.data);
+            return CatalogThread.parseFromCatalogJson(imageBoard, board, data);
+        } else {
+            let error = new Error('Response content-type header is not set or not equal to application/json.');
+            error.response = res;
+            throw error;
+        }
+    };
+
+
+    /**
+     * Request for a specific thread.
+     * @param {string} imageBoard
+     * @param {string} board
+     * @param {number} number 
+     * @returns {Thread | number} Fetched thread or 404.
+     * @throws {AxiosError | SyntaxError}
+     */
+    static async fetchThread(imageBoard, board, number) {
+        let url = ThreadsObserverService.formThreadUrl(imageBoard, board, number);
+
+        let res;
+        try {
+            res = await axios.get(url);
+        } catch(error) {
+            if(error.response && error.response.status === 404) {
+                return 404;
+            } else {
+                throw error;
+            }
+        }
+
+        if(res.headers['content-type'] === 'application/json') {
+            let data = JSON.parse(res.data);
+            return Thread.parseFromJson(imageBoard, board, data);
+        } else {
+            let error = new Error('Response content-type header is not set or not equal to application/json.');
+            error.response = res;
+            throw error;
+        }
+    };
+
+
+
+    // #########################
+    // Catalog observer controls
+    // #########################
+
     startCatalogObserver() {
-        let fn = async () => {
-            let catalog = await this.fetchCatalog(this.board);
-            if(catalog === null) {
-                if(this.catalogObserverTimeout !== null) {
-                    this.catalogObserverTimeout = setTimeout(fn, this.catalogObserverDelay);
-                }
+        let fetchErrorHandler = (error) => {
+            // TO-DO Log error
+        };
+
+        let observeCatalog = async () => {
+            /** @type {CatalogThread[]} */
+            let catalog;
+            try {
+                catalog = await ThreadsObserverService.fetchCatalog(this.imageBoard, this.board);
+            } catch(error) {
+                fetchErrorHandler(error);
                 return;
             }
 
-            let catalogThreads = [];
-            catalog.forEach((item) => {
-                catalogThreads.push(CatalogThread.parseFrom2chJson(item));
-            });
+            if(catalog === 404) {
+                // TO-DO Log 404
+                return;
+            }
 
+            // Search for new or modified threads.
+            /** @type {Thread} */
             let thread;
-            catalogThreads.forEach((ct) => {
-                thread = this.getThread(ct.number);
+            catalog.forEach((catalogThread) => {
+                thread = this.getThread(catalogThread.number);
 
-                if(thread !== null) {
-                    thread.veiwsCount = ct.veiwsCount;
-                    if(thread.lastPostTimestamp !== ct.lastPostTimestamp || thread.posts.length !== ct.postsCount) {
-                        this.increaseThreadPriorityInQueue(thread);
-                    }
+                if(thread === null) {
+                    this.addThreadToCirculatingQueue(catalogThread);
                 } else {
-                    this.addThreadToCirculatingQueue(ct);
-                }
-            });
-
-            let ct;
-            this.threads.forEach((thread) => {
-                for(let i = 0; i < catalogThreads.length - 1; i++) {
-                    ct = catalogThreads[i];
-                    if(ct.number !== thread.number && i === catalogThreads.length - 1) {
+                    thread.viewsCount = catalogThread.viewsCount;
+                    if(thread.lastActivity !== catalogThread.lastActivity || thread.posts.length !== catalogThread.postsCount) {
                         this.increaseThreadPriorityInQueue(thread);
                     }
                 }
             });
 
+            // Searching for probably deleted threads.
+            /** @type {CatalogThread} */
+            let catalogThread;
+            this.threads.forEach((thread) => {
+                for(let i = 0; i < catalog.length - 1; i++) {
+                    catalogThread = catalog[i];
+                    if(thread.number === catalogThread.number) {
+                        break;
+                    } else if(catalog.length - 1 === i) {
+                        // Thread not found in the fetched catalog.
+                        this.increaseThreadPriorityInQueue(thread);
+                    }
+                }
+            });
+        };
+
+        let timer = async () => {
+            await observeCatalog();
 
             if(this.catalogObserverTimeout !== null) {
                 this.catalogObserverTimeout = setTimeout(fn, this.catalogObserverDelay);
             }
         };
-        this.catalogObserverTimeout = setTimeout(fn, this.catalogObserverDelay);
+
+        this.catalogObserverTimeout = setTimeout(timer, this.catalogObserverDelay);
     };
 
     stopCatalogObserver() {
-        clearTimeout(this.catalogObserverTimeout);
+        let timeout = this.catalogObserverTimeout;
         this.catalogObserverTimeout = null;
+        clearTimeout(this.catalogObserverTimeout);
     };
 
 
-    // Threads updater queue controls
+    
+    // ########################
+    // Threads updater controls
+    // ########################
+
+    /**
+     * Add thread to the circulating queue.
+     * @param {CatalogThread | Thread} thread 
+     */
     addThreadToCirculatingQueue(thread) {
         let fn = () => {
             this.circulatingQueue.unshift(thread);
@@ -172,11 +257,16 @@ module.exports = class ThreadsObserverService extends EventEmitter {
         }
     };
 
+
+    /**
+     * Replace a thread in the start of the circulating queue.
+     * @param {Thread | CatalogThread} thread 
+     */
     increaseThreadPriorityInQueue(thread) {
         let fn = () => {
             let index = this.circulatingQueue.indexOf(thread);
             if(index < 0) {
-                console.log('ALARM TO DO ERROR!!!');
+                // TO-DO Thread not found in queue.
                 return;
             }
 
@@ -228,7 +318,18 @@ module.exports = class ThreadsObserverService extends EventEmitter {
             if(storedThread instanceof Thread) {
                 if(fetchedThread instanceof Thread) {
                     // check both threads
+
+                    
                     let diff = Thread.diffThreads(storedThread, fetchedThread);
+                    
+                    
+                    let pd = diff.postsDiff;
+                    
+                    
+                    
+                    
+                    
+                    
                     if(diff.fields.includes('')) {
 
                     }
@@ -268,14 +369,7 @@ module.exports = class ThreadsObserverService extends EventEmitter {
         clearTimeout(this.threadUpdaterTimeout);
         this.threadUpdaterTimeout = null;
     };
-
-
-    // Utils
-    static formThreadUrl(threadNumber) {
-        return `https://2ch.hk/b/res/${threadNumber}.json`;
-    };
-
-    static formCatalogUrl(board) {
-        return `https://2ch.hk/${board}/catalog.json`;
-    };
 };
+
+
+module.exports = ThreadsObserverService;

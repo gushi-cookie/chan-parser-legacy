@@ -24,9 +24,9 @@ class Thread {
      * @param {Post[]} posts 
      * @param {number} createTimestamp 
      * @param {number} viewsCount 
-     * @param {number} lastPostTimestamp 
+     * @param {number} lastActivity 
      */
-    constructor(number, title, board, postersCount, posts, createTimestamp, viewsCount, lastPostTimestamp) {
+    constructor(number, title, board, postersCount, posts, createTimestamp, viewsCount, lastActivity) {
         this.number = number;
         this.title = title;
         this.board = board;
@@ -34,7 +34,7 @@ class Thread {
         this.createTimestamp = createTimestamp;
         this.posts = posts;
         this.viewsCount = viewsCount;
-        this.lastPostTimestamp = lastPostTimestamp;
+        this.lastActivity = lastActivity;
         this.isDeleted = false;
     };
 
@@ -92,6 +92,25 @@ class Thread {
     };
 
 
+
+    /**
+     * Parse a raw thread object, depending on the image board.
+     * @param {string} imageBoard
+     * @param {string} board
+     * @param {Object} object 
+     * @returns {Thread | null} Thread
+     */
+    static parseFromJson(imageBoard, board, object) {
+        if(imageBoard === '4chan') {
+            return Thread.parseFrom4chanJson(board, object);
+        } else if(imageBoard === '2ch') {
+            return Thread.parseFrom2chJson(object);
+        } else {
+            return null;
+        }
+    };
+    
+
     /**
      * @param {*} object Parsed data object from 2ch API.
      * @returns {Thread} New Thread instance.
@@ -109,11 +128,18 @@ class Thread {
 
 
     /**
+     * @param {string} board
      * @param {*} object Parsed data object from 4chan API.
      * @returns {Thread} New Thread instance.
      */
-    static parseFrom4chanJson(object) {
-        // TO-DO
+    static parseFrom4chanJson(board, object) {
+        let posts = [];
+        object.posts.forEach((post) => {
+            posts.push(Post.parseFrom4chanJson(board, post));
+        });
+
+        let op = posts[0];
+        return new Thread(op.no, op.sub, board, op.unique_ips, posts, op.time, op.unique_ips, posts[posts.length-1].time);
     };
 };
 

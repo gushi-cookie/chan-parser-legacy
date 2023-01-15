@@ -203,11 +203,17 @@ class Post {
 
 
     /**
+     * @param {string} board
      * @param {*} object Parsed data object from 4chan API.
      * @returns {Post} New Post instance.
      */
-    static parseFrom4chanJson(object) {
-        // TO-DO
+    static parseFrom4chanJson(board, object) {
+        let files = [];
+        if(object.filename !== undefined) {
+            files.push(File.parseFrom4canJson(board, object));
+        }
+
+        return new Post(object.no, object.time, object.name, object.com, files, false, false, object.sub !== undefined);
     };
 };
 

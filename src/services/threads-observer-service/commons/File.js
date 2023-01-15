@@ -188,11 +188,14 @@ class File {
 
 
     /**
-     * @param {any} object Parsed data object from 4chan API.
+     * @param {string} board
+     * @param {Object} object Parsed data object from 4chan API.
      * @returns {File} New File instance
      */
-    static parseFrom4canJson(obj) {
-        // TO-DO
+    static parseFrom4canJson(board, object) {
+        new File(`https://i.4cdn.org/${board}/${object.tim}${object.ext}`,
+                 `https://i.4cdn.org/${board}/${object.tim}s.jpg`,
+                 object.filename, object.tim, object.md5)
     };
 };
 
