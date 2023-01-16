@@ -25,15 +25,17 @@ class File {
      * @param {string} uploadName 
      * @param {string} cdnName 
      * @param {string} checkSum 
+     * @param {boolean} isDeleted
      * 
      * @returns {File} New file instance
      */
-    constructor(url, thumbnailUrl, uploadName, cdnName, checkSum) {
+    constructor(url, thumbnailUrl, uploadName, cdnName, checkSum, isDeleted) {
         this.url = url;
         this.thumbnailUrl = thumbnailUrl;
         this.uploadName = uploadName;
         this.cdnName = cdnName;
         this.checkSum = checkSum;
+        this.isDeleted = isDeleted;
     };
 
 
@@ -183,7 +185,7 @@ class File {
      * @returns {File} New File instance
      */
     static parseFrom2chJson(object) {
-        return new File(object.path, object.thumbnailUrl, object.fullname, object.name, object.md5);
+        return new File(object.path, object.thumbnailUrl, object.fullname, object.name, object.md5, false);
     };
 
 
@@ -195,7 +197,7 @@ class File {
     static parseFrom4canJson(board, object) {
         new File(`https://i.4cdn.org/${board}/${object.tim}${object.ext}`,
                  `https://i.4cdn.org/${board}/${object.tim}s.jpg`,
-                 object.filename, object.tim, object.md5)
+                 object.filename, object.tim, object.md5, false);
     };
 };
 

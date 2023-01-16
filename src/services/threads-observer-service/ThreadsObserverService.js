@@ -4,8 +4,14 @@ const axios = require('axios');
 const Thread = require('./commons/Thread');
 const ThreadCreateEvent = require('../../events/ThreadCreateEvent');
 const ThreadDeleteEvent = require('../../events/ThreadDeleteEvent');
+const PostCreateEvent = require('../../events/PostCreateEvent');
+const PostDeleteEvent = require('../../events/PostDeleteEvent');
+const PostDiffEvent = require('../../events/PostDiffEvent');
 const CatalogThread = require('./commons/CatalogThread');
 const EventEmitter = require('events');
+const FileDeleteEvent = require('../../events/FileDeleteEvent');
+const FileCreateEvent = require('../../events/FileCreateEvent');
+const FileDiffEvent = require('../../events/FileDiffEvent');
 
 
 
@@ -133,7 +139,7 @@ class ThreadsObserverService extends EventEmitter {
      * @param {string} imageBoard
      * @param {string} board
      * @param {number} number 
-     * @returns {Thread | number} Fetched thread or 404.
+     * @returns {Promise.<Thread | number>} Fetched thread or 404.
      * @throws {AxiosError | SyntaxError}
      */
     static async fetchThread(imageBoard, board, number) {
@@ -166,9 +172,13 @@ class ThreadsObserverService extends EventEmitter {
     // Catalog observer controls
     // #########################
 
+    /**
+     * Start catalog observer timers.
+     */
     startCatalogObserver() {
-        let fetchErrorHandler = (error) => {
+        let handleFetchErrors = (error) => {
             // TO-DO Log error
+            console.log(error.message);
         };
 
         let observeCatalog = async () => {
@@ -177,7 +187,7 @@ class ThreadsObserverService extends EventEmitter {
             try {
                 catalog = await ThreadsObserverService.fetchCatalog(this.imageBoard, this.board);
             } catch(error) {
-                fetchErrorHandler(error);
+                handleFetchErrors(error);
                 return;
             }
 
@@ -222,13 +232,17 @@ class ThreadsObserverService extends EventEmitter {
             await observeCatalog();
 
             if(this.catalogObserverTimeout !== null) {
-                this.catalogObserverTimeout = setTimeout(fn, this.catalogObserverDelay);
+                this.catalogObserverTimeout = setTimeout(observeCatalog, this.catalogObserverDelay);
             }
         };
 
         this.catalogObserverTimeout = setTimeout(timer, this.catalogObserverDelay);
     };
 
+
+    /**
+     * Stop catalog observer timers.
+     */
     stopCatalogObserver() {
         let timeout = this.catalogObserverTimeout;
         this.catalogObserverTimeout = null;
@@ -237,9 +251,9 @@ class ThreadsObserverService extends EventEmitter {
 
 
     
-    // ########################
-    // Threads updater controls
-    // ########################
+    // ###########################
+    // Circulating queue interface
+    // ###########################
 
     /**
      * Add thread to the circulating queue.
@@ -281,6 +295,10 @@ class ThreadsObserverService extends EventEmitter {
         }
     };
 
+
+    /**
+     * Lock circulating queue array for its interface methods.
+     */
     lockCirculatingQueue() {
         let timer = () => {
             if(this.circulatingQueue.locked) {
@@ -296,78 +314,182 @@ class ThreadsObserverService extends EventEmitter {
         this.circulatingQueue.timer = setTimeout(timer, 500);
     };
 
+
+    /**
+     * Unlock circulating queue array for its interface methods.
+     */
     unlockCirculatingQueue() {
         this.circulatingQueue.locked = false;
     };
 
 
+
+    // #######################
+    // Thread updater controls
+    // #######################
+
+
+    /**
+     * Start thread updater timers.
+     */
     startThreadUpdater() {
-        let fn = async () => {
-            if(this.circulatingQueue.length === 0) {
-                if(this.threadUpdaterTimeout !== null) {
-                    this.threadUpdaterTimeout = setTimeout(fn, this.threadUpdaterDelay);
+        let handleFetchErrors = (error) => {
+            console.log(error.message);
+            // TO-DO Log
+        };
+
+        let handlePostsDiff = (td) => {
+            /** @type {import('./commons/Thread').ThreadsDiff} */
+            let threadsDiff = td;
+            
+            /** @type {import('./commons/Post').PostArraysDiff} */
+            let postArraysDiff = threadsDiff.postsDiff;
+
+            // Handle deleted posts.
+            postArraysDiff.postsWithoutPair1.forEach((post) => {
+                if(!post.isDeleted) {
+                    post.isDeleted = true;
+                    this.emit(PostDeleteEvent.name, new PostDeleteEvent(threadsDiff.thread1, post, threadsDiff.board));
                 }
+            });
+
+            // Handle new posts.
+            postArraysDiff.postsWithoutPair2.forEach((post) => {
+                threadsDiff.thread1.posts.push(post);
+                this.emit(PostCreateEvent.name, new PostCreateEvent(threadsDiff.thread1, post, threadsDiff.thread1.board));
+            });
+
+            // Handle posts differences.
+            /** @type {import('./commons/Post').PostsDiff} */
+            let postsDiff;
+            postArraysDiff.differences.forEach((pd) => {
+                postsDiff = pd;
+
+                if(postsDiff.fields.includes('isBanned')) {
+                    postsDiff.post1.isBanned = postsDiff.post2.isBanned;
+                }
+                if(postsDiff.fields.includes('files')) {
+                    handleFilesDiff(threadsDiff.thread1, postsDiff.post1, postsDiff.filesDiff);
+                }
+                if(postsDiff.fields.length > 0) {
+                    this.emit(PostDiffEvent.name, new PostDiffEvent(threadsDiff.thread1, postsDiff.post1, threadsDiff.thread1.board, postsDiff));
+                }
+            });
+        };
+        let handleFilesDiff = (thread, post, fad) => {
+            /** @type {import('./commons/File').FileArraysDiff} */
+            let fileArraysDiff = fad;
+
+            // Handle deleted files.
+            fileArraysDiff.filesWithoutPair1.forEach((file) => {
+                if(!file.isDeleted) {
+                    file.isDeleted = true;
+                    this.emit(FileDeleteEvent.name, new FileDeleteEvent(thread, post, file));
+                }
+            });
+
+            // Handle new files.
+            fileArraysDiff.filesWithoutPair2.forEach((file) => {
+                post.files.push(file);
+                this.emit(FileCreateEvent.name, new FileCreateEvent(thread, post, file));
+            });
+
+            // Handle files differences.
+            /** @type {import('./commons/File').FilesDiff} */
+            let filesDiff;
+            fileArraysDiff.differences.forEach((fd) => {
+                filesDiff = fd;
+                this.emit(FileDiffEvent.name, new FileDiffEvent(thread, post, filesDiff.file1, filesDiff));
+            });
+        };
+
+        let updateThread = async () => {
+            this.lockCirculatingQueue();
+
+            /** @type {Thread | CatalogThread} */
+            let storedThread = this.circulatingQueue[0];
+            if(storedThread === undefined) {
+                this.unlockCirculatingQueue();
                 return;
             }
 
-            this.lockCirculatingQueue();
-
-            let storedThread = this.circulatingQueue[0];
-            let fetchedThread = await this.fetchThread(storedThread.number);
+            /** @type {Thread} */
+            let fetchedThread;
+            try {
+                fetchedThread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, storedThread.number);
+            } catch(error) {
+                handleFetchErrors(error);
+                this.unlockCirculatingQueue();
+                return;
+            }
 
             if(storedThread instanceof Thread) {
                 if(fetchedThread instanceof Thread) {
-                    // check both threads
+                    // Check both threads
 
-                    
-                    let diff = Thread.diffThreads(storedThread, fetchedThread);
-                    
-                    
-                    let pd = diff.postsDiff;
-                    
-                    
-                    
-                    
-                    
-                    
-                    if(diff.fields.includes('')) {
+                    /** @type {import('./commons/Thread').ThreadsDiff} */
+                    let threadsDiff = Thread.diffThreads(storedThread, fetchedThread);
 
+                    if(threadsDiff.fields.includes('postersCount')) {
+                        storedThread.postersCount = fetchedThread.postersCount;
                     }
+                    if(threadsDiff.fields.includes('lastActivity')) {
+                        storedThread.lastActivity = fetchedThread.lastActivity;
+                    }
+                    if(threadsDiff.fields.includes('files')) {
+                        handlePostsDiff(threadsDiff);
+                    }
+
                 } else if(fetchedThread === 404) {
-                    // thread deleted from board
+                    // Stored thread has been deleted from the board.
                     this.circulatingQueue.splice(0, 1);
                     storedThread.isDeleted = true;
                     this.emit(ThreadDeleteEvent.name, new ThreadDeleteEvent(storedThread, storedThread.board));
                 }
             }
-            
+
             if(storedThread instanceof CatalogThread) {
                 if(fetchedThread instanceof Thread) {
-                    // new thread fetched
+                    // New thread fetched from the catalog thread.
                     if(!this.getThread(fetchedThread.number)) {
                         this.threads.push(fetchedThread);
+                        this.circulatingQueue.splice(0, 1);
+                        this.circulatingQueue.push(fetchedThread);
                         this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(fetchedThread, fetchedThread.board));
                     } else {
                         // TO-DO -> Log collision
+                        console.log('Threads collision occured.');
                     }
                 } else if(fetchedThread === 404) {
-                    // ct nof found. remove it from queue
+                    // Pair thread for this catalog thread has not been fetched. Remove it from the queue.
                     this.circulatingQueue.splice(0, 1);
+                    // TO-DO -> Log thread deleteion.
+                    console.log('Thread deleted before first fetch.');
                 }
             }
 
             this.unlockCirculatingQueue();
+        };
 
+        let timer = async () => {
+            await updateThread();
+            
             if(this.threadUpdaterTimeout !== null) {
-                this.threadUpdaterTimeout = setTimeout(fn, this.threadUpdaterDelay);
+                this.threadUpdaterTimeout = setTimeout(timer, this.threadUpdaterDelay);
             }
         };
-        this.threadUpdaterTimeout = setTimeout(fn, this.threadUpdaterDelay);
+
+        this.threadUpdaterTimeout = setTimeout(timer, this.threadUpdaterDelay);
     };
 
+
+    /**
+     * Stop thread updater timers.
+     */
     stopThreadUpdater() {
-        clearTimeout(this.threadUpdaterTimeout);
+        let timeout = this.threadUpdaterTimeout;
         this.threadUpdaterTimeout = null;
+        clearTimeout(this.threadUpdaterTimeout);
     };
 };
 
