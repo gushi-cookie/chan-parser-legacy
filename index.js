@@ -1,4 +1,4 @@
-const EntryPointTODO = require('./src/EntryPointTODO');
+const ChanParser = require('./src/ChanParser');
 
-const entryPointTODO = new EntryPointTODO();
-entryPointTODO.start();
+const chanParser = new ChanParser();
+chanParser.start();

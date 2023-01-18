@@ -104,7 +104,7 @@ class Post {
         let result = {
             post1: post1,
             post2: post2,
-            fields: fields,
+            fields: [],
             filesDiff: null,
         };
 
@@ -133,7 +133,7 @@ class Post {
      * @returns {PostArraysDiff | null}
      */
     static diffPostArrays(array1, array2) {
-        if(!(array1 instanceof Post) || !(array2 instanceof Post)) {
+        if(!(array1 instanceof Array) || !(array2 instanceof Array)) {
             return null;
         }
 
@@ -153,15 +153,20 @@ class Post {
                     if(diff.fields.length !== 0) {
                         result.differences.push(diff);
                     }
+                    return;
                 }
             });
         });
 
 
-        let pair;
         array1.forEach((post) => {
-            for(let i = 0; i < pairs.length - 1; i++) {
-                if(pair.post1 === post) {
+            if(pairs.length === 0) {
+                result.postsWithoutPair1.push(post);
+                return;
+            }
+
+            for(let i = 0; i < pairs.length; i++) {
+                if(pairs[i].post1 === post) {
                     break;
                 } else if(pairs.length - 1 === i) {
                     result.postsWithoutPair1.push(post);
@@ -170,8 +175,13 @@ class Post {
         });
 
         array2.forEach((post) => {
-            for(let i = 0; i < pairs.length - 1; i++) {
-                if(pair.post2 === post) {
+            if(pairs.length === 0) {
+                result.postsWithoutPair2.push(post);
+                return;
+            }
+
+            for(let i = 0; i < pairs.length; i++) {
+                if(pairs[i].post2 === post) {
                     break;
                 } else if(pairs.length - 1 === i) {
                     result.postsWithoutPair2.push(post);
@@ -213,7 +223,7 @@ class Post {
             files.push(File.parseFrom4canJson(board, object));
         }
 
-        return new Post(object.no, object.time, object.name, object.com, files, false, false, object.sub !== undefined);
+        return new Post(object.no, object.time, object.name, object.com === undefined ? '' : object.com, files, false, false, object.sub !== undefined);
     };
 };
 

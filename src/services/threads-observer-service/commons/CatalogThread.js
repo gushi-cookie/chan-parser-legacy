@@ -2,12 +2,12 @@ class CatalogThread {
 
     /**
      * Create an instance of the CatalogThread class.
-     * @param {number} number 
-     * @param {number} createTimestamp Timestamp in the UNIX format
-     * @param {number} viewsCount 
-     * @param {number} postsCount 
-     * @param {number} lastActivity Timestamp in the UNIX format
-     * @param {string} board 
+     * @param {number} number Thread id.
+     * @param {number} createTimestamp Timestamp in the UNIX format.
+     * @param {number} viewsCount Views count (may be 0).
+     * @param {number} postsCount Posts count.
+     * @param {number} lastActivity Timestamp when the last time the thread was modified (post add/mod/del; thread closed/sticky).
+     * @param {string} board Board initials.
      */
     constructor(number, createTimestamp, viewsCount, postsCount, lastActivity, board) {
         this.number = number;
@@ -23,33 +23,33 @@ class CatalogThread {
      * Parse catalog threads, according to image board response format.
      * @param {string} imageBoard 
      * @param {string} board 
-     * @param {Object} catalogObj 
+     * @param {Object} catalogArray 
      * @returns {CatalogThread[]}
      */
-    static parseFromCatalogJson(imageBoard, board, catalogObj) {
+    static parseFromCatalogJson(imageBoard, board, catalogArray) {
         if(imageBoard === '4chan') {
             let rawThreads = [];
 
-            catalogObj.forEach((page) => {
-                if(page.rawThreads instanceof Array) {
+            catalogArray.forEach((page) => {
+                if(page.threads instanceof Array) {
                     rawThreads = rawThreads.concat(page.threads);
                 }
             });
 
             let result = [];
-            rawThreads.forEach((threadObj) => {
-                result.push(CatalogThread.parseFrom4chanJson(board, threadObj));
+            rawThreads.forEach((object) => {
+                result.push(CatalogThread.parseFrom4chanJson(board, object));
             });
 
             return result;
         } else if(imageBoard === '2ch') {
             let result = [];
             
-            if(!(catalogObj.threadObj instanceof Array)) {
+            if(!(catalogArray.threads instanceof Array)) {
                 return [];
             }
             
-            catalogObj.threads.forEach((threadObj) => {
+            catalogArray.threads.forEach((threadObj) => {
                 result.push(CatalogThread.parseFrom2chJson(threadObj));
             });
 

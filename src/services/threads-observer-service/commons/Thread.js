@@ -17,14 +17,14 @@ class Thread {
 
     /**
      * Create an instance of the Thread class.
-     * @param {number} number 
-     * @param {string} title 
-     * @param {string} board 
-     * @param {number} postersCount 
-     * @param {Post[]} posts 
-     * @param {number} createTimestamp 
-     * @param {number} viewsCount 
-     * @param {number} lastActivity 
+     * @param {number} number thread id.
+     * @param {string} title first post subject.
+     * @param {string} board board initials.
+     * @param {number} postersCount unique posters count.
+     * @param {Post[]} posts posts array.
+     * @param {number} createTimestamp first post timestamp.
+     * @param {number} viewsCount views count (may be 0).
+     * @param {number} lastActivity timestamp when the last time the thread was modified (post add/mod/del; thread closed/sticky).
      */
     constructor(number, title, board, postersCount, posts, createTimestamp, viewsCount, lastActivity) {
         this.number = number;
@@ -123,7 +123,7 @@ class Thread {
             });
         }
 
-        return new Thread(object.current_thread, object.title, object.board.id, object.unique_posters, posts, posts[0].createTimestamp, 0, posts[posts.length-1].createTimestamp);
+        return new Thread(object.current_thread, object.title, object.board.id, object.unique_posters, posts, posts[0].createTimestamp, 0, 0);
     };
 
 
@@ -138,8 +138,8 @@ class Thread {
             posts.push(Post.parseFrom4chanJson(board, post));
         });
 
-        let op = posts[0];
-        return new Thread(op.no, op.sub, board, op.unique_ips, posts, op.time, op.unique_ips, posts[posts.length-1].time);
+        let op = object.posts[0];
+        return new Thread(op.no, op.sub, board, op.unique_ips, posts, op.time, op.unique_ips, 0);
     };
 };
 

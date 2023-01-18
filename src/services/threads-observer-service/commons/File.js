@@ -151,12 +151,14 @@ class File {
         });
 
 
-        let pair;
         array1.forEach((file) => {
-            for(let i = 0; i < pairs.length - 1; i++) {
-                pair = pairs[i];
+            if(pairs.length === 0) {
+                result.filesWithoutPair1.push(file);
+                return;
+            }
 
-                if(pair.file1 === file) {
+            for(let i = 0; i < pairs.length; i++) {
+                if(pairs[i].file1 === file) {
                     break;
                 } else if(pairs.length-1 === i) {
                     result.filesWithoutPair1.push(file);
@@ -165,10 +167,13 @@ class File {
         });
 
         array2.forEach((file) => {
-            for(let i = 0; i < pairs.length - 1; i++) {
-                pair = pairs[i];
+            if(pairs.length === 0) {
+                result.filesWithoutPair2.push(file);
+                return;
+            }
 
-                if(pair.file2 === file) {
+            for(let i = 0; i < pairs.length; i++) {
+                if(pairs[i].file2 === file) {
                     break;
                 } else if(pairs.length-1 === i) {
                     result.filesWithoutPair2.push(file);
@@ -195,9 +200,9 @@ class File {
      * @returns {File} New File instance
      */
     static parseFrom4canJson(board, object) {
-        new File(`https://i.4cdn.org/${board}/${object.tim}${object.ext}`,
-                 `https://i.4cdn.org/${board}/${object.tim}s.jpg`,
-                 object.filename, object.tim, object.md5, false);
+        return new File(`https://i.4cdn.org/${board}/${object.tim}${object.ext}`,
+                        `https://i.4cdn.org/${board}/${object.tim}s.jpg`,
+                        object.filename, object.tim, object.md5, false);
     };
 };
 

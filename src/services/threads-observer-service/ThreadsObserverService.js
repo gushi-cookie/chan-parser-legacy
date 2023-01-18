@@ -1,6 +1,4 @@
 const axios = require('axios');
-// const axios = require('axios').default;
-// const axios = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const Thread = require('./commons/Thread');
 const ThreadCreateEvent = require('../../events/ThreadCreateEvent');
 const ThreadDeleteEvent = require('../../events/ThreadDeleteEvent');
@@ -12,6 +10,7 @@ const EventEmitter = require('events');
 const FileDeleteEvent = require('../../events/FileDeleteEvent');
 const FileCreateEvent = require('../../events/FileCreateEvent');
 const FileDiffEvent = require('../../events/FileDiffEvent');
+const ThreadDiffEvent = require('../../events/ThreadDiffEvent');
 
 
 
@@ -25,17 +24,22 @@ class ThreadsObserverService extends EventEmitter {
      * Create an instance of the ThreadsObserverService class.
      */
     constructor() {
+        super();
         this.threads = [];
-        this.catalogObserverTimeout = null;
-        this.catalogObserverDelay = 5000;
+
+        this.catalogWhitelist = [];
+        this.catalogWhitelistEnabled = false;
+
+        this.catalogObserverRunning = false;
+        this.catalogObserverDelay = 2500;
 
         this.circulatingQueue = [];
         this.circulatingQueue.locked = false;
         this.circulatingQueue.timer = null;
         this.circulatingQueue.stack = [];
 
-        this.threadUpdaterTimeout = null;
-        this.threadUpdaterDelay = 5000;
+        this.threadUpdaterRunning = false;
+        this.threadUpdaterDelay = 500;
 
         this.imageBoard = '2ch';
         this.board = 'b';
@@ -123,9 +127,8 @@ class ThreadsObserverService extends EventEmitter {
             }
         }
 
-        if(res.headers['content-type'] === 'application/json') {
-            let data = JSON.parse(res.data);
-            return CatalogThread.parseFromCatalogJson(imageBoard, board, data);
+        if((typeof res.headers['content-type'] === 'string') && res.headers['content-type'].includes('application/json')) {
+            return CatalogThread.parseFromCatalogJson(imageBoard, board, res.data);
         } else {
             let error = new Error('Response content-type header is not set or not equal to application/json.');
             error.response = res;
@@ -156,9 +159,8 @@ class ThreadsObserverService extends EventEmitter {
             }
         }
 
-        if(res.headers['content-type'] === 'application/json') {
-            let data = JSON.parse(res.data);
-            return Thread.parseFromJson(imageBoard, board, data);
+        if((typeof res.headers['content-type'] === 'string') && res.headers['content-type'].includes('application/json')) {
+            return Thread.parseFromJson(imageBoard, board, res.data);
         } else {
             let error = new Error('Response content-type header is not set or not equal to application/json.');
             error.response = res;
@@ -193,6 +195,7 @@ class ThreadsObserverService extends EventEmitter {
 
             if(catalog === 404) {
                 // TO-DO Log 404
+                console.log('Catalog fetch 404');
                 return;
             }
 
@@ -200,15 +203,22 @@ class ThreadsObserverService extends EventEmitter {
             /** @type {Thread} */
             let thread;
             catalog.forEach((catalogThread) => {
-                thread = this.getThread(catalogThread.number);
+                if(this.catalogWhitelistEnabled && ! this.catalogWhitelist.includes(catalogThread.number)) {
+                    return;
+                }
 
-                if(thread === null) {
-                    this.addThreadToCirculatingQueue(catalogThread);
-                } else {
-                    thread.viewsCount = catalogThread.viewsCount;
-                    if(thread.lastActivity !== catalogThread.lastActivity || thread.posts.length !== catalogThread.postsCount) {
+                thread = this.getThread(catalogThread.number);
+                if(thread !== null && !thread.isDeleted) {
+                    // To-do -> fire thread diff event if some fields are different
+                    // update lastActivity too
+                    // thread.viewsCount = catalogThread.viewsCount;
+                    //  || thread.posts.length !== catalogThread.postsCount
+                    if(thread.lastActivity !== catalogThread.lastActivity) {
+                        thread.lastActivity = catalogThread.lastActivity;
                         this.increaseThreadPriorityInQueue(thread);
                     }
+                } else if(thread === null && !this.hasThreadInQueue(catalogThread.number)) {
+                    this.addThreadToCirculatingQueue(catalogThread);
                 }
             });
 
@@ -216,7 +226,7 @@ class ThreadsObserverService extends EventEmitter {
             /** @type {CatalogThread} */
             let catalogThread;
             this.threads.forEach((thread) => {
-                for(let i = 0; i < catalog.length - 1; i++) {
+                for(let i = 0; i < catalog.length; i++) {
                     catalogThread = catalog[i];
                     if(thread.number === catalogThread.number) {
                         break;
@@ -228,15 +238,15 @@ class ThreadsObserverService extends EventEmitter {
             });
         };
 
-        let timer = async () => {
-            await observeCatalog();
-
-            if(this.catalogObserverTimeout !== null) {
-                this.catalogObserverTimeout = setTimeout(observeCatalog, this.catalogObserverDelay);
-            }
+        let recursiveTimer = async () => {
+            this.catalogObserverRunning && await observeCatalog();
+            this.catalogObserverRunning && await (new Promise((resolve) => { setTimeout(resolve, this.threadUpdaterDelay); }));
+            this.catalogObserverRunning && recursiveTimer();
         };
 
-        this.catalogObserverTimeout = setTimeout(timer, this.catalogObserverDelay);
+        // Starter.
+        this.catalogObserverRunning = true;
+        setTimeout(recursiveTimer, this.catalogObserverDelay);
     };
 
 
@@ -244,9 +254,7 @@ class ThreadsObserverService extends EventEmitter {
      * Stop catalog observer timers.
      */
     stopCatalogObserver() {
-        let timeout = this.catalogObserverTimeout;
-        this.catalogObserverTimeout = null;
-        clearTimeout(this.catalogObserverTimeout);
+        this.catalogObserverRunning = false;
     };
 
 
@@ -254,6 +262,18 @@ class ThreadsObserverService extends EventEmitter {
     // ###########################
     // Circulating queue interface
     // ###########################
+
+    /**
+     * @param {number} number
+     */
+    hasThreadInQueue(number) {
+        for(let i = 0; i < this.circulatingQueue.length; i++) {
+            if(this.circulatingQueue[i].number === number) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     /**
      * Add thread to the circulating queue.
@@ -264,7 +284,7 @@ class ThreadsObserverService extends EventEmitter {
             this.circulatingQueue.unshift(thread);
         };
 
-        if(this.circulatingQueue.locked) {
+        if(this.circulatingQueue.timer !== null) {
             this.circulatingQueue.stack.push(fn);
         } else {
             fn();
@@ -288,7 +308,7 @@ class ThreadsObserverService extends EventEmitter {
             this.circulatingQueue.unshift(thread);
         };
 
-        if(this.circulatingQueue.locked) {
+        if(this.circulatingQueue.timer !== null) {
             this.circulatingQueue.stack.push(fn);
         } else {
             fn();
@@ -330,7 +350,7 @@ class ThreadsObserverService extends EventEmitter {
 
 
     /**
-     * Start thread updater timers.
+     * Start thread updater timer.
      */
     startThreadUpdater() {
         let handleFetchErrors = (error) => {
@@ -365,17 +385,23 @@ class ThreadsObserverService extends EventEmitter {
             postArraysDiff.differences.forEach((pd) => {
                 postsDiff = pd;
 
+                if(postsDiff.post1.isDeleted) {
+                    // TO-DO Log
+                    console.log('Post has rose from the dead!');
+                }
+
                 if(postsDiff.fields.includes('isBanned')) {
                     postsDiff.post1.isBanned = postsDiff.post2.isBanned;
-                }
-                if(postsDiff.fields.includes('files')) {
-                    handleFilesDiff(threadsDiff.thread1, postsDiff.post1, postsDiff.filesDiff);
                 }
                 if(postsDiff.fields.length > 0) {
                     this.emit(PostDiffEvent.name, new PostDiffEvent(threadsDiff.thread1, postsDiff.post1, threadsDiff.thread1.board, postsDiff));
                 }
+                if(postsDiff.fields.includes('files')) {
+                    handleFilesDiff(threadsDiff.thread1, postsDiff.post1, postsDiff.filesDiff);
+                }
             });
         };
+        
         let handleFilesDiff = (thread, post, fad) => {
             /** @type {import('./commons/File').FileArraysDiff} */
             let fileArraysDiff = fad;
@@ -434,12 +460,17 @@ class ThreadsObserverService extends EventEmitter {
                         storedThread.postersCount = fetchedThread.postersCount;
                     }
                     if(threadsDiff.fields.includes('lastActivity')) {
-                        storedThread.lastActivity = fetchedThread.lastActivity;
+                        threadsDiff.fields.splice(threadsDiff.fields.indexOf('lastActivity'), 1);
                     }
-                    if(threadsDiff.fields.includes('files')) {
+                    if(threadsDiff.fields.length > 0) {
+                        this.emit(ThreadDiffEvent.name, new ThreadDiffEvent(storedThread, storedThread.board, threadsDiff));
+                    }
+                    if(threadsDiff.fields.includes('posts')) {
                         handlePostsDiff(threadsDiff);
                     }
 
+                    this.circulatingQueue.splice(0, 1);
+                    this.circulatingQueue.push(storedThread);
                 } else if(fetchedThread === 404) {
                     // Stored thread has been deleted from the board.
                     this.circulatingQueue.splice(0, 1);
@@ -452,44 +483,44 @@ class ThreadsObserverService extends EventEmitter {
                 if(fetchedThread instanceof Thread) {
                     // New thread fetched from the catalog thread.
                     if(!this.getThread(fetchedThread.number)) {
+                        fetchedThread.lastActivity = storedThread.lastActivity;
                         this.threads.push(fetchedThread);
                         this.circulatingQueue.splice(0, 1);
                         this.circulatingQueue.push(fetchedThread);
                         this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(fetchedThread, fetchedThread.board));
                     } else {
                         // TO-DO -> Log collision
-                        console.log('Threads collision occured.');
+                        console.log('Threads collision occured. Num: ' + storedThread.number);
+                        this.circulatingQueue.splice(0, 1);
                     }
                 } else if(fetchedThread === 404) {
-                    // Pair thread for this catalog thread has not been fetched. Remove it from the queue.
+                    // Pair thread for this catalog thread has been deleted. Remove it from the queue.
                     this.circulatingQueue.splice(0, 1);
                     // TO-DO -> Log thread deleteion.
-                    console.log('Thread deleted before first fetch.');
+                    console.log('Thread deleted before first fetch. Number: ' + storedThread.number);
                 }
             }
 
             this.unlockCirculatingQueue();
         };
 
-        let timer = async () => {
-            await updateThread();
-            
-            if(this.threadUpdaterTimeout !== null) {
-                this.threadUpdaterTimeout = setTimeout(timer, this.threadUpdaterDelay);
-            }
+        let recursiveTimer = async () => {
+            this.threadUpdaterRunning && await updateThread();
+            this.threadUpdaterRunning && await (new Promise((resolve) => { setTimeout(resolve, this.threadUpdaterDelay); }));
+            this.threadUpdaterRunning && recursiveTimer();
         };
 
-        this.threadUpdaterTimeout = setTimeout(timer, this.threadUpdaterDelay);
+        // Starter.
+        this.threadUpdaterRunning = true;
+        setTimeout(recursiveTimer, this.threadUpdaterDelay);
     };
 
 
     /**
-     * Stop thread updater timers.
+     * Stop thread updater timer.
      */
     stopThreadUpdater() {
-        let timeout = this.threadUpdaterTimeout;
-        this.threadUpdaterTimeout = null;
-        clearTimeout(this.threadUpdaterTimeout);
+        this.threadUpdaterRunning = false;
     };
 };
 
