@@ -1,9 +1,19 @@
-const PostEvent = require("./PostEvent");
+const PostEvent = require('./PostEvent');
 
-module.exports = class PostDeleteEvent extends PostEvent {
+/**
+ * Class representing deletion event data of a post.
+ */
+class PostDeleteEvent extends PostEvent {
     static name = 'post-delete';
 
-    constructor(thread, post, board) {
-        super(thread, post, board);
+    /**
+     * Create an instance of the PostDeleteEvent class.
+     * @param {Thread} thread 
+     * @param {Post} post 
+     */
+    constructor(thread, post) {
+        super(thread, post);
     };
 };
+
+module.exports = PostDeleteEvent;

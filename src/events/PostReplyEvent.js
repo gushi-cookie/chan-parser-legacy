@@ -1,10 +1,21 @@
-const PostEvent = require("./PostEvent");
+const PostEvent = require('./PostEvent');
 
-module.exports = class PostReplyEvent extends PostEvent {
+/**
+ * Class representing event data of new posts with replies to another posts.
+ */
+class PostReplyEvent extends PostEvent {
     static name = 'post-reply';
 
-    constructor(thread, post, board, initiator) {
-        super(thread, post, board);
-        this.initiator = initiator;
+    /**
+     * Create an instance of the PostReplyEvent class.
+     * @param {Thread} thread 
+     * @param {Post} targetPost 
+     * @param {Post} newPost 
+     */
+    constructor(thread, targetPost, newPost) {
+        super(thread, targetPost);
+        this.newPost = newPost;
     };
 };
+
+module.exports = PostReplyEvent;

@@ -1,6 +1,15 @@
-module.exports = class ThreadEvent {
-    constructor(thread, board) {
+/**
+ * Base class for the thread events.
+ */
+class ThreadEvent {
+
+    /**
+     * Create an instance of the ThreadEvent class.
+     * @param {Thread} thread
+     */
+    constructor(thread) {
         this.thread = thread;
-        this.board = board;
     };
 };
+
+module.exports = ThreadEvent;

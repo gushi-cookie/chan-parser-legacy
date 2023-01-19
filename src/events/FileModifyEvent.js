@@ -1,9 +1,13 @@
 const FileEvent = require('./FileEvent');
 
-class FileDiffEvent extends FileEvent {
-    static name = 'file-diff';
+/**
+ * Class representing file modification event data.
+ */
+class FileModifyEvent extends FileEvent {
+    static name = 'file-modify';
 
     /**
+     * Create an instance of the FileModifyEvent class.
      * @param {Thread} thread 
      * @param {Post} post 
      * @param {File} file 
@@ -12,7 +16,7 @@ class FileDiffEvent extends FileEvent {
     constructor(thread, post, file, filesDiff) {
         super(thread, post, file);
         this.filesDiff = filesDiff;
-    }
+    };
 };
 
-module.exports = FileDiffEvent;
+module.exports = FileModifyEvent;

@@ -1,9 +1,18 @@
-const ThreadEvent = require("./ThreadEvent");
+const ThreadEvent = require('./ThreadEvent');
 
-module.exports = class ThreadCreateEvent extends ThreadEvent {
+/**
+ * Class representing creation event data of a thread.
+ */
+class ThreadCreateEvent extends ThreadEvent {
     static name = 'thread-create';
 
-    constructor(thread, board) {
-        super(thread, board);
+    /**
+     * Create an instance of the ThreadCreateEvent class.
+     * @param {Thread} thread 
+     */
+    constructor(thread) {
+        super(thread);
     };
 };
+
+module.exports = ThreadCreateEvent;
