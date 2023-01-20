@@ -354,6 +354,21 @@ class ThreadsObserverService extends EventEmitter {
      * Start thread updater timer.
      */
     startThreadUpdater() {
+        // Events (ThreadModify, PostCreate, PostDelete, PostModify, FileCreate, FileDelete, FileModify)
+        // are sequential. For examle, if a file has a modification, then this sequence of events will
+        // happen: ThreadModify -> PostModify -> FileModify. Or, with some modifications to a post:
+        // ThreadModify -> PostModify.
+        //
+        // If a post being deleted, then its files become deleted too (isDeleted is set to true).
+        // The sequence of events for this case: ThreadModify -> PostDelete -> FileDelete.
+        //
+        // If a thread being deleted, then nothing happens to its posts or files.
+        //
+        // Events (ThreadDelete, ThreadNotFound, ThreadCreate) are single. It means that after firing
+        // one of these events, events like (FileDelete, PostDelete) or (FileCreate, PostCreate) are
+        // not being fired.
+
+
         let handleFetchErrors = (error) => {
             console.log(error.message);
             // TO-DO Log
@@ -371,6 +386,11 @@ class ThreadsObserverService extends EventEmitter {
                 if(!post.isDeleted) {
                     post.isDeleted = true;
                     this.emit(PostDeleteEvent.name, new PostDeleteEvent(threadsDiff.thread1, post));
+
+                    post.files.forEach((file) => {
+                        file.isDeleted = true;
+                        this.emit(FileDeleteEvent.name, new FileDeleteEvent(threadsDiff.thread1, post, file));
+                    });
                 }
             });
 
@@ -378,6 +398,10 @@ class ThreadsObserverService extends EventEmitter {
             postArraysDiff.postsWithoutPair2.forEach((post) => {
                 threadsDiff.thread1.posts.push(post);
                 this.emit(PostCreateEvent.name, new PostCreateEvent(threadsDiff.thread1, post));
+
+                post.files.forEach((file) => {
+                    this.emit(FileCreateEvent.name, new FileCreateEvent(threadsDiff.thread1, post, file));
+                });
             });
 
             // Handle posts differences.
