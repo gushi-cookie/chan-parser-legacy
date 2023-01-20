@@ -7,9 +7,9 @@ module.exports = class ChanParser {
         this.threadsObserverService.on('thread-create', (tce) => {
             console.log('New thread! Num: ' + tce.thread.number);
         });
-        this.threadsObserverService.on('thread-diff', (tde) => {
-            console.log('Threads diff! Num: ' + tde.thread.number);
-            let td = tde.threadsDiff;
+        this.threadsObserverService.on('thread-modify', (tme) => {
+            console.log('Threads diff! Num: ' + tme.thread.number);
+            let td = tme.threadsDiff;
             let td2 = {
                 thread1: null,
                 thread2: null,

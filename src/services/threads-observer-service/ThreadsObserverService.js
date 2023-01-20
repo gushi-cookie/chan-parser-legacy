@@ -1,18 +1,19 @@
 const axios = require('axios');
 const Thread = require('./commons/Thread');
-const ThreadCreateEvent = require('../../events/ThreadCreateEvent');
-const ThreadDeleteEvent = require('../../events/ThreadDeleteEvent');
-const PostCreateEvent = require('../../events/PostCreateEvent');
-const PostDeleteEvent = require('../../events/PostDeleteEvent');
-const PostDiffEvent = require('../../events/PostDiffEvent');
 const CatalogThread = require('./commons/CatalogThread');
 const EventEmitter = require('events');
-const FileDeleteEvent = require('../../events/FileDeleteEvent');
-const FileCreateEvent = require('../../events/FileCreateEvent');
-const FileDiffEvent = require('../../events/FileDiffEvent');
-const ThreadDiffEvent = require('../../events/ThreadDiffEvent');
 
-
+const ThreadCreateEvent = require('./events/ThreadCreateEvent');
+const ThreadDeleteEvent = require('./events/ThreadDeleteEvent');
+const ThreadModifyEvent = require('./events/ThreadModifyEvent');
+const ThreadNotFoundEvent = require('./events/ThreadNotFoundEvent');
+const PostCreateEvent = require('./events/PostCreateEvent');
+const PostDeleteEvent = require('./events/PostDeleteEvent');
+const PostModifyEvent = require('./events/PostModifyEvent');
+const PostReplyEvent = require('./events/PostReplyEvent');
+const FileCreateEvent = require('./events/FileCreateEvent');
+const FileDeleteEvent = require('./events/FileDeleteEvent');
+const FileModifyEvent = require('./events/FileModifyEvent');
 
 
 
@@ -369,14 +370,14 @@ class ThreadsObserverService extends EventEmitter {
             postArraysDiff.postsWithoutPair1.forEach((post) => {
                 if(!post.isDeleted) {
                     post.isDeleted = true;
-                    this.emit(PostDeleteEvent.name, new PostDeleteEvent(threadsDiff.thread1, post, threadsDiff.board));
+                    this.emit(PostDeleteEvent.name, new PostDeleteEvent(threadsDiff.thread1, post));
                 }
             });
 
             // Handle new posts.
             postArraysDiff.postsWithoutPair2.forEach((post) => {
                 threadsDiff.thread1.posts.push(post);
-                this.emit(PostCreateEvent.name, new PostCreateEvent(threadsDiff.thread1, post, threadsDiff.thread1.board));
+                this.emit(PostCreateEvent.name, new PostCreateEvent(threadsDiff.thread1, post));
             });
 
             // Handle posts differences.
@@ -394,7 +395,7 @@ class ThreadsObserverService extends EventEmitter {
                     postsDiff.post1.isBanned = postsDiff.post2.isBanned;
                 }
                 if(postsDiff.fields.length > 0) {
-                    this.emit(PostDiffEvent.name, new PostDiffEvent(threadsDiff.thread1, postsDiff.post1, threadsDiff.thread1.board, postsDiff));
+                    this.emit(PostModifyEvent.name, new PostModifyEvent(threadsDiff.thread1, postsDiff.post1, postsDiff));
                 }
                 if(postsDiff.fields.includes('files')) {
                     handleFilesDiff(threadsDiff.thread1, postsDiff.post1, postsDiff.filesDiff);
@@ -425,7 +426,7 @@ class ThreadsObserverService extends EventEmitter {
             let filesDiff;
             fileArraysDiff.differences.forEach((fd) => {
                 filesDiff = fd;
-                this.emit(FileDiffEvent.name, new FileDiffEvent(thread, post, filesDiff.file1, filesDiff));
+                this.emit(FileModifyEvent.name, new FileModifyEvent(thread, post, filesDiff.file1, filesDiff));
             });
         };
 
@@ -463,7 +464,7 @@ class ThreadsObserverService extends EventEmitter {
                         threadsDiff.fields.splice(threadsDiff.fields.indexOf('lastActivity'), 1);
                     }
                     if(threadsDiff.fields.length > 0) {
-                        this.emit(ThreadDiffEvent.name, new ThreadDiffEvent(storedThread, storedThread.board, threadsDiff));
+                        this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(storedThread, threadsDiff));
                     }
                     if(threadsDiff.fields.includes('posts')) {
                         handlePostsDiff(threadsDiff);
@@ -475,7 +476,7 @@ class ThreadsObserverService extends EventEmitter {
                     // Stored thread has been deleted from the board.
                     this.circulatingQueue.splice(0, 1);
                     storedThread.isDeleted = true;
-                    this.emit(ThreadDeleteEvent.name, new ThreadDeleteEvent(storedThread, storedThread.board));
+                    this.emit(ThreadDeleteEvent.name, new ThreadDeleteEvent(storedThread));
                 }
             }
 
@@ -487,17 +488,16 @@ class ThreadsObserverService extends EventEmitter {
                         this.threads.push(fetchedThread);
                         this.circulatingQueue.splice(0, 1);
                         this.circulatingQueue.push(fetchedThread);
-                        this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(fetchedThread, fetchedThread.board));
+                        this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(fetchedThread));
                     } else {
                         // TO-DO -> Log collision
                         console.log('Threads collision occured. Num: ' + storedThread.number);
                         this.circulatingQueue.splice(0, 1);
                     }
                 } else if(fetchedThread === 404) {
-                    // Pair thread for this catalog thread has been deleted. Remove it from the queue.
+                    // Thread deleted before first fetch.
                     this.circulatingQueue.splice(0, 1);
-                    // TO-DO -> Log thread deleteion.
-                    console.log('Thread deleted before first fetch. Number: ' + storedThread.number);
+                    this.emit(ThreadNotFoundEvent.name, new ThreadNotFoundEvent(storedThread));
                 }
             }
 
