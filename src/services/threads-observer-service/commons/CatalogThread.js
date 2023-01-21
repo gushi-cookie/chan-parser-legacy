@@ -8,14 +8,22 @@ class CatalogThread {
      * @param {number} postsCount Posts count.
      * @param {number} lastActivity Timestamp when the last time the thread was modified (post add/mod/del; thread closed/sticky).
      * @param {string} board Board initials.
+     * @param {string} name Op post name.
+     * @param {string} title Op post title.
+     * @param {string} comment Op post comment.
+     * @param {string} imageBoard Image board name.
      */
-    constructor(number, createTimestamp, viewsCount, postsCount, lastActivity, board) {
+    constructor(number, createTimestamp, viewsCount, postsCount, lastActivity, board, name, title, comment, imageBoard) {
         this.number = number;
         this.createTimestamp = createTimestamp;
         this.viewsCount = viewsCount;
         this.postsCount = postsCount;
         this.lastActivity = lastActivity;
         this.board = board;
+        this.name = name;
+        this.title = title;
+        this.comment = comment;
+        this.imageBoard = imageBoard;
     };
 
 
@@ -79,21 +87,40 @@ class CatalogThread {
 
     /**
      * Parse a catalog thread from a raw object.
-     * @param {Object} object 
+     * @param {Object} object parsed object from the API.
      * @returns {CatalogThread} Catalog thread
      */
     static parseFrom2chJson(object) {
-        return new CatalogThread(object.num, object.timestamp, object.views, object.posts_count, object.lasthit, object.board);
+        if(typeof object.name !== 'string') {
+            object.name = '';
+        }
+        if(typeof object.subject !== 'string') {
+            object.subject = '';
+        }
+        if(typeof object.comment !== 'string') {
+            object.comment = '';
+        }
+        return new CatalogThread(object.num, object.timestamp, object.views, object.posts_count, object.lasthit, object.board, object.name, object.subject, object.comment, '2ch');
     };
 
 
     /**
      * Parse a catalog thread from a raw object.
-     * @param {Object} object 
+     * @param {String} board board initials.
+     * @param {Object} object parsed object from the API.
      * @returns {CatalogThread} Catalog thread
      */
     static parseFrom4chanJson(board, object) {
-        return new CatalogThread(object.no, object.time, 0, object.replies, object.last_modified, board);
+        if(typeof object.name !== 'string') {
+            object.name = '';
+        }
+        if(typeof object.sub !== 'string') {
+            object.sub = '';
+        }
+        if(typeof object.com !== 'string') {
+            object.com = '';
+        }
+        return new CatalogThread(object.no, object.time, 0, object.replies, object.last_modified, board, object.name, object.sub, object.com, '4chan');
     };
 };
 
