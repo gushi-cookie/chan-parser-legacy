@@ -23,7 +23,7 @@ class Thread {
      * @param {number} postersCount unique posters count.
      * @param {Post[]} posts posts array.
      * @param {number} createTimestamp first post timestamp.
-     * @param {number} viewsCount views count (may be 0).
+     * @param {number} viewsCount views count.
      * @param {number} lastActivity timestamp when the last time the thread was modified (post add/mod/del; thread closed/sticky).
      * @param {string} imageBoard image board's name.
      */
@@ -53,6 +53,20 @@ class Thread {
         });
         
         return result;
+    };
+
+
+    /**
+     * Clone this Thread instance.
+     * @returns {Thread} clone of this instance.
+     */
+    clone() {
+        let posts = [];
+        this.posts.forEach((post) => {
+            posts.push(post.clone());
+        });
+
+        return new Thread(this.number, this.title, this.board, this.postersCount, posts, this.createTimestamp, this.viewsCount, this.lastActivity, this.imageBoard);
     };
 
 
@@ -97,6 +111,9 @@ class Thread {
 
     /**
      * Parse a raw thread object, depending on the image board.
+     * 
+     * Note: fields viewsCount and lastActivity are set to 0.
+     * 
      * @param {string} imageBoard
      * @param {string} board
      * @param {Object} object 
@@ -115,6 +132,9 @@ class Thread {
 
     /**
      * Parse a thread from a raw object.
+     * 
+     * Note: fields viewsCount and lastActivity are set to 0.
+     * 
      * @param {Object} object Parsed data object from 2ch API.
      * @returns {Thread} New Thread instance.
      */
@@ -132,6 +152,9 @@ class Thread {
 
     /**
      * Parse a thread from a raw object.
+     *
+     * Note: fields viewsCount and lastActivity are set to 0.
+     * 
      * @param {string} board Board initials.
      * @param {Object} object Parsed data object from 4chan API.
      * @returns {Thread} New Thread instance.
@@ -143,7 +166,7 @@ class Thread {
         });
 
         let op = object.posts[0];
-        return new Thread(op.no, op.sub, board, op.unique_ips, posts, op.time, op.unique_ips, 0, '4chan');
+        return new Thread(op.no, op.sub, board, op.unique_ips, posts, op.time, 0, 0, '4chan');
     };
 };
 

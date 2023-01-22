@@ -29,6 +29,9 @@ class CatalogThread {
 
     /**
      * Parse catalog threads, according to image board response format.
+     * 
+     * Note: for the 4chan imageBoard - property viewsCount is set to 0.
+     * 
      * @param {string} imageBoard 
      * @param {string} board 
      * @param {Object} catalogArray 
@@ -69,6 +72,9 @@ class CatalogThread {
 
     /**
      * Parse a catalog thread from a raw object, depending on the image board.
+     * 
+     * Note: for the 4chan imageBoard - property viewsCount is set to 0.
+     * 
      * @param {string} imageBoard 
      * @param {string} board
      * @param {Object} object
@@ -106,6 +112,9 @@ class CatalogThread {
 
     /**
      * Parse a catalog thread from a raw object.
+     * 
+     * Note: property viewsCount is set to 0.
+     * 
      * @param {String} board board initials.
      * @param {Object} object parsed object from the API.
      * @returns {CatalogThread} Catalog thread

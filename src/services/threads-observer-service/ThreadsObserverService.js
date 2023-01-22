@@ -179,6 +179,14 @@ class ThreadsObserverService extends EventEmitter {
      * Start catalog observer timers.
      */
     startCatalogObserver() {
+        // Since some of the thread fields are only available from its catalog thread's
+        // representation, this function updates these fields and fires ThreadModifyEvent event,
+        // on already stored threads.
+        //
+        // Observer method handles properties viewsCount and lastActivity by itself. If changes
+        // are detected (in a stored thread to its representation on a catalog thread), then the
+        // observer fires ThreadModifyEvent event, and after the event, applies the changes to a thread.
+
         let handleFetchErrors = (error) => {
             // TO-DO Log error
             console.log(error.message);
@@ -201,8 +209,10 @@ class ThreadsObserverService extends EventEmitter {
             }
 
             // Search for new or modified threads.
-            /** @type {Thread} */
-            let thread;
+            let 
+            /** @type {Thread} */ thread,
+            /** @type {Thread} */ blankThread,
+            /** @type {import('./commons/Thread').ThreadsDiff} */ threadsDiff;
             catalog.forEach((catalogThread) => {
                 if(this.catalogWhitelistEnabled && ! this.catalogWhitelist.includes(catalogThread.number)) {
                     return;
@@ -210,13 +220,19 @@ class ThreadsObserverService extends EventEmitter {
 
                 thread = this.getThread(catalogThread.number);
                 if(thread !== null && !thread.isDeleted) {
-                    // To-do -> fire thread diff event if some fields are different
-                    // update lastActivity too
-                    // thread.viewsCount = catalogThread.viewsCount;
-                    //  || thread.posts.length !== catalogThread.postsCount
-                    if(thread.lastActivity !== catalogThread.lastActivity) {
+                    if(thread.viewsCount !== catalogThread.viewsCount || thread.lastActivity !== catalogThread.lastActivity) {
+                        blankThread = thread.clone();
+                        blankThread.viewsCount = catalogThread.viewsCount;
+                        blankThread.lastActivity = catalogThread.lastActivity;
+
+                        threadsDiff = Thread.diffThreads(thread, blankThread);
+                        this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(thread, threadsDiff));
+                        thread.viewsCount = catalogThread.viewsCount;
                         thread.lastActivity = catalogThread.lastActivity;
-                        this.increaseThreadPriorityInQueue(thread);
+
+                        if(threadsDiff.fields.includes('lastActivity')) {
+                            this.increaseThreadPriorityInQueue(thread);
+                        }
                     }
                 } else if(thread === null && !this.hasThreadInQueue(catalogThread.number)) {
                     this.addThreadToCirculatingQueue(catalogThread);
@@ -367,6 +383,10 @@ class ThreadsObserverService extends EventEmitter {
         // Events (ThreadDelete, ThreadNotFound, ThreadCreate) are single. It means that after firing
         // one of these events, events like (FileDelete, PostDelete) or (FileCreate, PostCreate) are
         // not being fired.
+        //
+        // Thread updater ignores viewsCount and lastActivity fields in the thread to thread comparison,
+        // since catalog observer updates them. Also threads from fetchThread function have these properties
+        // are set to 0.
 
 
         let handleFetchErrors = (error) => {
@@ -480,12 +500,10 @@ class ThreadsObserverService extends EventEmitter {
 
                     /** @type {import('./commons/Thread').ThreadsDiff} */
                     let threadsDiff = Thread.diffThreads(storedThread, fetchedThread);
+                    threadsDiff.fields = threadsDiff.fields.filter(e => e !== 'lastActivity' && e !== 'viewsCount');
 
                     if(threadsDiff.fields.includes('postersCount')) {
                         storedThread.postersCount = fetchedThread.postersCount;
-                    }
-                    if(threadsDiff.fields.includes('lastActivity')) {
-                        threadsDiff.fields.splice(threadsDiff.fields.indexOf('lastActivity'), 1);
                     }
                     if(threadsDiff.fields.length > 0) {
                         this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(storedThread, threadsDiff));
@@ -509,6 +527,7 @@ class ThreadsObserverService extends EventEmitter {
                     // New thread fetched from the catalog thread.
                     if(!this.getThread(fetchedThread.number)) {
                         fetchedThread.lastActivity = storedThread.lastActivity;
+                        fetchedThread.viewsCount = storedThread.viewsCount;
                         this.threads.push(fetchedThread);
                         this.circulatingQueue.splice(0, 1);
                         this.circulatingQueue.push(fetchedThread);

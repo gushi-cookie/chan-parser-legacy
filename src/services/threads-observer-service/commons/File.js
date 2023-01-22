@@ -58,6 +58,15 @@ class File {
 
 
     /**
+     * Clone this File instance.
+     * @returns {File} clone of this instance.
+     */
+    clone() {
+        return new File(this.url, this.thumbnailUrl, this.uploadName, this.cdnName, this.checkSum, this.isDeleted);
+    };
+
+
+    /**
      * Checks if two File arrays are equal.
      * @param {File[]} array1 First file array
      * @param {File[]} array2 Second file array

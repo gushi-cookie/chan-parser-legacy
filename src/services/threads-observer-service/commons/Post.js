@@ -89,6 +89,20 @@ class Post {
 
 
     /**
+     * Clone this Post instance.
+     * @returns {Post} clone of this instance.
+     */
+    clone() {
+        let files = [];
+        this.files.forEach((file) => {
+            files.push(file.clone());
+        });
+
+        return new Post(this.number, this.createTimestamp, this.name, this.comment, files, this.isBanned, this.isDeleted, this.isOp);
+    };
+    
+
+    /**
      * Find differences between two posts.
      * @param {Post} post1 First post
      * @param {Post} post2 Second post
