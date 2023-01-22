@@ -435,11 +435,11 @@ class ThreadsObserverService extends EventEmitter {
                     console.log('Post has rose from the dead!');
                 }
 
-                if(postsDiff.fields.includes('isBanned')) {
-                    postsDiff.post1.isBanned = postsDiff.post2.isBanned;
-                }
                 if(postsDiff.fields.length > 0) {
                     this.emit(PostModifyEvent.name, new PostModifyEvent(threadsDiff.thread1, postsDiff.post1, postsDiff));
+                }
+                if(postsDiff.fields.includes('isBanned')) {
+                    postsDiff.post1.isBanned = postsDiff.post2.isBanned;
                 }
                 if(postsDiff.fields.includes('files')) {
                     handleFilesDiff(threadsDiff.thread1, postsDiff.post1, postsDiff.filesDiff);
@@ -502,11 +502,11 @@ class ThreadsObserverService extends EventEmitter {
                     let threadsDiff = Thread.diffThreads(storedThread, fetchedThread);
                     threadsDiff.fields = threadsDiff.fields.filter(e => e !== 'lastActivity' && e !== 'viewsCount');
 
-                    if(threadsDiff.fields.includes('postersCount')) {
-                        storedThread.postersCount = fetchedThread.postersCount;
-                    }
                     if(threadsDiff.fields.length > 0) {
                         this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(storedThread, threadsDiff));
+                    }
+                    if(threadsDiff.fields.includes('postersCount')) {
+                        storedThread.postersCount = fetchedThread.postersCount;
                     }
                     if(threadsDiff.fields.includes('posts')) {
                         handlePostsDiff(threadsDiff);
