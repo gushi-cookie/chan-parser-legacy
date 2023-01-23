@@ -199,7 +199,19 @@ class File {
      * @returns {File} New File instance
      */
     static parseFrom2chJson(object) {
-        return new File(object.path, object.thumbnailUrl, object.fullname, object.name, object.md5, false);
+        let index = object.fullname.lastIndexOf('.');
+        if(index >= 0) object.fullname = object.fullname.slice(0, index);
+
+        index = object.name.lastIndexOf('.');
+        if(index >= 0) object.name = object.name.slice(0, index);
+
+        
+        return new File(`https://2ch.hk${object.path}`,
+                        `https://2ch.hk${object.thumbnail}`, 
+                        object.fullname,
+                        object.name,
+                        object.md5,
+                        false);
     };
 
 

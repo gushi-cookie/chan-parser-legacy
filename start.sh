@@ -23,9 +23,11 @@ if [[ $empty_node_container == "true" ]]; then
                 node bash
                 
 else
+    mkdir -p /dev/shm/chan_parser
     docker run  -it --rm \
                 --user 1000:1000 \
                 --volume $(pwd):/app \
+                --volume /dev/shm/chan_parser:/home/node/output \
                 --name running-chan-parser \
                 chan-parser
 fi
