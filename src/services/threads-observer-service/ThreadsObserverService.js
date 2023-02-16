@@ -33,14 +33,7 @@ class ThreadsObserverService extends EventEmitter {
 
         this.catalogObserverRunning = false;
         this.catalogObserverDelay = 2500;
-
-        this.circulatingQueue = [];
-        this.circulatingQueue.locked = false;
-        this.circulatingQueue.timer = null;
-        this.circulatingQueue.stack = [];
-
-        this.threadUpdaterRunning = false;
-        this.threadUpdaterDelay = 500;
+        this.threadFetchDelay = 500;
 
         this.imageBoard = '2ch';
         this.board = 'b';
@@ -48,9 +41,9 @@ class ThreadsObserverService extends EventEmitter {
 
 
 
-    // ########################
-    // Thread storage interface
-    // ########################
+    // #########################
+    // Threads storage interface
+    // #########################
 
     /**
      * Search for a stored thread with same number.
@@ -179,219 +172,41 @@ class ThreadsObserverService extends EventEmitter {
      * Start catalog observer timers.
      */
     startCatalogObserver() {
-        // Since some of the thread fields are only available from its catalog thread's
-        // representation, this function updates these fields and fires ThreadModifyEvent event,
-        // on already stored threads.
-        //
-        // Observer method handles properties viewsCount and lastActivity by itself. If changes
-        // are detected (in a stored thread to its representation on a catalog thread), then the
-        // observer fires ThreadModifyEvent event, and after the event, applies the changes to a thread.
-
         let handleFetchErrors = (error) => {
             // TO-DO Log error
             console.log(error.message);
         };
 
-        let observeCatalog = async () => {
-            /** @type {CatalogThread[]} */
-            let catalog;
-            try {
-                catalog = await ThreadsObserverService.fetchCatalog(this.imageBoard, this.board);
-            } catch(error) {
-                handleFetchErrors(error);
-                return;
-            }
+        let wait = async (delay) => {
+            return new Promise((resolve) => { setTimeout(resolve, delay); });
+        };
 
-            if(catalog === 404) {
-                // TO-DO Log 404
-                console.log('Catalog fetch 404');
-                return;
-            }
+        
+        let handleFilesDiff = (thread, post, fad) => {
+            /** @type {import('./commons/File').FileArraysDiff} */
+            let fileArraysDiff = fad;
 
-            // Search for new or modified threads.
-            let 
-            /** @type {Thread} */ thread,
-            /** @type {Thread} */ blankThread,
-            /** @type {import('./commons/Thread').ThreadsDiff} */ threadsDiff;
-            catalog.forEach((catalogThread) => {
-                if(this.catalogWhitelistEnabled && ! this.catalogWhitelist.includes(catalogThread.number)) {
-                    return;
-                }
-
-                thread = this.getThread(catalogThread.number);
-                if(thread !== null && !thread.isDeleted) {
-                    if(thread.viewsCount !== catalogThread.viewsCount || thread.lastActivity !== catalogThread.lastActivity) {
-                        blankThread = thread.clone();
-                        blankThread.viewsCount = catalogThread.viewsCount;
-                        blankThread.lastActivity = catalogThread.lastActivity;
-
-                        threadsDiff = Thread.diffThreads(thread, blankThread);
-                        this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(thread, threadsDiff));
-                        thread.viewsCount = catalogThread.viewsCount;
-                        thread.lastActivity = catalogThread.lastActivity;
-
-                        if(threadsDiff.fields.includes('lastActivity')) {
-                            this.increaseThreadPriorityInQueue(thread);
-                        }
-                    }
-                } else if(thread === null && !this.hasThreadInQueue(catalogThread.number)) {
-                    this.addThreadToCirculatingQueue(catalogThread);
+            // Handle deleted files.
+            fileArraysDiff.filesWithoutPair1.forEach((file) => {
+                if(!file.isDeleted) {
+                    file.isDeleted = true;
+                    this.emit(FileDeleteEvent.name, new FileDeleteEvent(thread, post, file));
                 }
             });
 
-            // Searching for probably deleted threads.
-            /** @type {CatalogThread} */
-            let catalogThread;
-            this.threads.forEach((thread) => {
-                for(let i = 0; i < catalog.length; i++) {
-                    catalogThread = catalog[i];
-                    if(thread.number === catalogThread.number) {
-                        break;
-                    } else if(catalog.length - 1 === i) {
-                        // Thread not found in the fetched catalog.
-                        this.increaseThreadPriorityInQueue(thread);
-                    }
-                }
+            // Handle new files.
+            fileArraysDiff.filesWithoutPair2.forEach((file) => {
+                post.files.push(file);
+                this.emit(FileCreateEvent.name, new FileCreateEvent(thread, post, file));
             });
-        };
 
-        let recursiveTimer = async () => {
-            this.catalogObserverRunning && await observeCatalog();
-            this.catalogObserverRunning && await (new Promise((resolve) => { setTimeout(resolve, this.threadUpdaterDelay); }));
-            this.catalogObserverRunning && recursiveTimer();
-        };
-
-        // Starter.
-        this.catalogObserverRunning = true;
-        setTimeout(recursiveTimer, this.catalogObserverDelay);
-    };
-
-
-    /**
-     * Stop catalog observer timers.
-     */
-    stopCatalogObserver() {
-        this.catalogObserverRunning = false;
-    };
-
-
-    
-    // ###########################
-    // Circulating queue interface
-    // ###########################
-
-    /**
-     * @param {number} number
-     */
-    hasThreadInQueue(number) {
-        for(let i = 0; i < this.circulatingQueue.length; i++) {
-            if(this.circulatingQueue[i].number === number) {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    /**
-     * Add thread to the circulating queue.
-     * @param {CatalogThread | Thread} thread 
-     */
-    addThreadToCirculatingQueue(thread) {
-        let fn = () => {
-            this.circulatingQueue.unshift(thread);
-        };
-
-        if(this.circulatingQueue.timer !== null) {
-            this.circulatingQueue.stack.push(fn);
-        } else {
-            fn();
-        }
-    };
-
-
-    /**
-     * Replace a thread in the start of the circulating queue.
-     * @param {Thread | CatalogThread} thread 
-     */
-    increaseThreadPriorityInQueue(thread) {
-        let fn = () => {
-            let index = this.circulatingQueue.indexOf(thread);
-            if(index < 0) {
-                // TO-DO Thread not found in queue.
-                return;
-            }
-
-            this.circulatingQueue.splice(index, 1);
-            this.circulatingQueue.unshift(thread);
-        };
-
-        if(this.circulatingQueue.timer !== null) {
-            this.circulatingQueue.stack.push(fn);
-        } else {
-            fn();
-        }
-    };
-
-
-    /**
-     * Lock circulating queue array for its interface methods.
-     */
-    lockCirculatingQueue() {
-        let timer = () => {
-            if(this.circulatingQueue.locked) {
-                this.circulatingQueue.timer = setTimeout(timer, 500);
-            } else {
-                this.circulatingQueue.stack.forEach((fn) => { fn(); });
-                this.circulatingQueue.timer = null;
-                this.circulatingQueue.stack = [];
-            }
-        };
-
-        this.circulatingQueue.locked = true;
-        this.circulatingQueue.timer = setTimeout(timer, 500);
-    };
-
-
-    /**
-     * Unlock circulating queue array for its interface methods.
-     */
-    unlockCirculatingQueue() {
-        this.circulatingQueue.locked = false;
-    };
-
-
-
-    // #######################
-    // Thread updater controls
-    // #######################
-
-
-    /**
-     * Start thread updater timer.
-     */
-    startThreadUpdater() {
-        // Events (ThreadModify, PostCreate, PostDelete, PostModify, FileCreate, FileDelete, FileModify)
-        // are sequential. For examle, if a file has a modification, then this sequence of events will
-        // happen: ThreadModify -> PostModify -> FileModify. Or, with some modifications to a post:
-        // ThreadModify -> PostModify.
-        //
-        // If a post being deleted, then its files become deleted too (isDeleted is set to true).
-        // The sequence of events for this case: ThreadModify -> PostDelete -> FileDelete.
-        //
-        // If a thread being deleted, then nothing happens to its posts or files.
-        //
-        // Events (ThreadDelete, ThreadNotFound, ThreadCreate) are single. It means that after firing
-        // one of these events, events like (FileDelete, PostDelete) or (FileCreate, PostCreate) are
-        // not being fired.
-        //
-        // Thread updater ignores viewsCount and lastActivity fields in the thread to thread comparison,
-        // since catalog observer updates them. Also threads from fetchThread function have these properties
-        // are set to 0.
-
-
-        let handleFetchErrors = (error) => {
-            console.log(error.message);
-            // TO-DO Log
+            // Handle files differences.
+            /** @type {import('./commons/File').FilesDiff} */
+            let filesDiff;
+            fileArraysDiff.differences.forEach((fd) => {
+                filesDiff = fd;
+                this.emit(FileModifyEvent.name, new FileModifyEvent(thread, post, filesDiff.file1, filesDiff));
+            });
         };
 
         let handlePostsDiff = (td) => {
@@ -446,124 +261,169 @@ class ThreadsObserverService extends EventEmitter {
                 }
             });
         };
-        
-        let handleFilesDiff = (thread, post, fad) => {
-            /** @type {import('./commons/File').FileArraysDiff} */
-            let fileArraysDiff = fad;
 
-            // Handle deleted files.
-            fileArraysDiff.filesWithoutPair1.forEach((file) => {
-                if(!file.isDeleted) {
-                    file.isDeleted = true;
-                    this.emit(FileDeleteEvent.name, new FileDeleteEvent(thread, post, file));
-                }
-            });
+        let updateThread = async (thread) => {
+            // Events (ThreadModify, PostCreate, PostDelete, PostModify, FileCreate, FileDelete, FileModify)
+            // are sequential. For examle, if a file has a modification, then this sequence of events will
+            // happen: ThreadModify -> PostModify -> FileModify. Or, with some modifications to a post:
+            // ThreadModify -> PostModify.
+            //
+            // If a post being deleted, then its files become deleted too (isDeleted is set to true).
+            // The sequence of events for this case: ThreadModify -> PostDelete -> FileDelete.
+            //
+            // If a thread being deleted, then nothing happens to its posts or files.
+            //
+            // Events (ThreadDelete, ThreadNotFound, ThreadCreate) are single. It means that after firing
+            // one of these events, events like (FileDelete, PostDelete) or (FileCreate, PostCreate) are
+            // not being fired.
+            //
+            // Thread updater ignores viewsCount and lastActivity fields in the thread to thread comparison,
+            // since catalog observer updates them. Also threads from fetchThread function have these properties
+            // are set to 0.
 
-            // Handle new files.
-            fileArraysDiff.filesWithoutPair2.forEach((file) => {
-                post.files.push(file);
-                this.emit(FileCreateEvent.name, new FileCreateEvent(thread, post, file));
-            });
-
-            // Handle files differences.
-            /** @type {import('./commons/File').FilesDiff} */
-            let filesDiff;
-            fileArraysDiff.differences.forEach((fd) => {
-                filesDiff = fd;
-                this.emit(FileModifyEvent.name, new FileModifyEvent(thread, post, filesDiff.file1, filesDiff));
-            });
-        };
-
-        let updateThread = async () => {
-            this.lockCirculatingQueue();
-
-            /** @type {Thread | CatalogThread} */
-            let storedThread = this.circulatingQueue[0];
-            if(storedThread === undefined) {
-                this.unlockCirculatingQueue();
-                return;
-            }
 
             /** @type {Thread} */
             let fetchedThread;
             try {
-                fetchedThread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, storedThread.number);
+                fetchedThread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, thread.number);
             } catch(error) {
                 handleFetchErrors(error);
-                this.unlockCirculatingQueue();
                 return;
             }
 
-            if(storedThread instanceof Thread) {
-                if(fetchedThread instanceof Thread) {
-                    // Check both threads
+            if(fetchedThread === 404) {
+                thread.isDeleted = true;
+                this.emit(ThreadDeleteEvent.name, new ThreadDeleteEvent(thread));
+                return;
+            }
 
-                    /** @type {import('./commons/Thread').ThreadsDiff} */
-                    let threadsDiff = Thread.diffThreads(storedThread, fetchedThread);
-                    threadsDiff.fields = threadsDiff.fields.filter(e => e !== 'lastActivity' && e !== 'viewsCount');
+            /** @type {import('./commons/Thread').ThreadsDiff} */
+            let threadsDiff = Thread.diffThreads(thread, fetchedThread);
+            threadsDiff.fields = threadsDiff.fields.filter(e => e !== 'lastActivity' && e !== 'viewsCount');
 
-                    if(threadsDiff.fields.length > 0) {
-                        this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(storedThread, threadsDiff));
+            if(threadsDiff.fields.length > 0) {
+                this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(thread, threadsDiff));
+            }
+            if(threadsDiff.fields.includes('postersCount')) {
+                thread.postersCount = fetchedThread.postersCount;
+            }
+            if(threadsDiff.fields.includes('posts')) {
+                handlePostsDiff(threadsDiff);
+            }
+        };
+
+
+        let observeCatalog = async () => {
+            // Since some of the thread fields are only available from its catalog thread's
+            // representation, this function updates these fields and fires ThreadModifyEvent event,
+            // on already stored threads.
+            //
+            // Observer method handles properties viewsCount and lastActivity by itself. If changes
+            // are detected (in a stored thread to its representation on a catalog thread), then the
+            // observer fires ThreadModifyEvent event, and after the event, applies the changes to a thread.
+
+            /** @type {CatalogThread[]} */
+            let catalog;
+            try {
+                catalog = await ThreadsObserverService.fetchCatalog(this.imageBoard, this.board);
+            } catch(error) {
+                handleFetchErrors(error);
+                return;
+            }
+
+            if(catalog === 404) {
+                // TO-DO Log 404
+                console.log('Catalog fetch 404');
+                return;
+            }
+
+            // Search for new or modified threads.
+            let 
+            /** @type {Thread} */ thread,
+            /** @type {Thread} */ blankThread,
+            /** @type {CatalogThread} */ catalogThread,
+            /** @type {import('./commons/Thread').ThreadsDiff} */ threadsDiff;
+            for(let i = 0; i < catalog.length; i++) {
+                catalogThread = catalog[i];
+
+                if(this.catalogWhitelistEnabled && ! this.catalogWhitelist.includes(catalogThread.number)) {
+                    continue;
+                }
+
+                thread = this.getThread(catalogThread.number);
+                if(thread !== null) {
+                    if(thread.viewsCount !== catalogThread.viewsCount || thread.lastActivity !== catalogThread.lastActivity) {
+                        blankThread = thread.clone();
+                        blankThread.viewsCount = catalogThread.viewsCount;
+                        blankThread.lastActivity = catalogThread.lastActivity;
+
+                        threadsDiff = Thread.diffThreads(thread, blankThread);
+                        this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(thread, threadsDiff));
+                        thread.viewsCount = catalogThread.viewsCount;
+                        thread.lastActivity = catalogThread.lastActivity;
+
+                        if(threadsDiff.fields.includes('lastActivity')) {
+                            await updateThread(thread);
+                            await wait(this.threadFetchDelay);
+                        }
                     }
-                    if(threadsDiff.fields.includes('postersCount')) {
-                        storedThread.postersCount = fetchedThread.postersCount;
-                    }
-                    if(threadsDiff.fields.includes('posts')) {
-                        handlePostsDiff(threadsDiff);
+                } else if(thread === null) {
+                    try {
+                        thread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, catalogThread.number);
+                        await wait(this.threadFetchDelay);
+                    } catch(error) {
+                        handleFetchErrors(error);
+                        continue;
                     }
 
-                    this.circulatingQueue.splice(0, 1);
-                    this.circulatingQueue.push(storedThread);
-                } else if(fetchedThread === 404) {
-                    // Stored thread has been deleted from the board.
-                    this.circulatingQueue.splice(0, 1);
-                    storedThread.isDeleted = true;
-                    this.emit(ThreadDeleteEvent.name, new ThreadDeleteEvent(storedThread));
+                    if(thread === 404) {
+                        // TO-DO Log
+                        console.log('Thread not found 404.');
+                        continue;
+                    }
+
+                    thread.lastActivity = catalogThread.lastActivity;
+                    thread.viewsCount = catalogThread.viewsCount;
+                    this.threads.push(thread);
+                    this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(thread));
                 }
             }
 
-            if(storedThread instanceof CatalogThread) {
-                if(fetchedThread instanceof Thread) {
-                    // New thread fetched from the catalog thread.
-                    if(!this.getThread(fetchedThread.number)) {
-                        fetchedThread.lastActivity = storedThread.lastActivity;
-                        fetchedThread.viewsCount = storedThread.viewsCount;
-                        this.threads.push(fetchedThread);
-                        this.circulatingQueue.splice(0, 1);
-                        this.circulatingQueue.push(fetchedThread);
-                        this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(fetchedThread));
-                    } else {
-                        // TO-DO -> Log collision
-                        console.log('Threads collision occured. Num: ' + storedThread.number);
-                        this.circulatingQueue.splice(0, 1);
+            // Searching for probably deleted threads.
+            for(let i = 0; i < this.threads.length; i++) {
+                thread = this.threads[i];
+
+                for(let j = 0; j < catalog.length; j++) {
+                    catalogThread = catalog[j];
+                    if(thread.number === catalogThread.number) {
+                        break;
+                    } else if(catalog.length - 1 === j) {
+                        // Thread not found in the fetched catalog.
+                        await updateThread(thread);
+                        await wait(this.threadFetchDelay);
                     }
-                } else if(fetchedThread === 404) {
-                    // Thread deleted before first fetch.
-                    this.circulatingQueue.splice(0, 1);
-                    this.emit(ThreadNotFoundEvent.name, new ThreadNotFoundEvent(storedThread));
                 }
             }
-
-            this.unlockCirculatingQueue();
         };
 
-        let recursiveTimer = async () => {
-            this.threadUpdaterRunning && await updateThread();
-            this.threadUpdaterRunning && await (new Promise((resolve) => { setTimeout(resolve, this.threadUpdaterDelay); }));
-            this.threadUpdaterRunning && recursiveTimer();
-        };
 
         // Starter.
-        this.threadUpdaterRunning = true;
-        setTimeout(recursiveTimer, this.threadUpdaterDelay);
+        let recursiveTimer = async () => {
+            this.catalogObserverRunning && await observeCatalog();
+            this.catalogObserverRunning && await wait(this.catalogObserverDelay);
+            this.catalogObserverRunning && recursiveTimer();
+        };
+
+        this.catalogObserverRunning = true;
+        setTimeout(recursiveTimer, this.catalogObserverDelay);
     };
 
 
     /**
-     * Stop thread updater timer.
+     * Stop catalog observer timers.
      */
-    stopThreadUpdater() {
-        this.threadUpdaterRunning = false;
+    stopCatalogObserver() {
+        this.catalogObserverRunning = false;
     };
 };
 

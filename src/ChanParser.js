@@ -17,19 +17,17 @@ module.exports = class ChanParser {
         });
 
         setInterval(() => {
-            console.log(this.threadsObserverService.circulatingQueue.length + ' Q/S ' + this.threadsObserverService.threads.length);
+            console.log('S ' + this.threadsObserverService.threads.length);
         }, 3000);
     };
 
     start() {
         this.threadsObserverService.startCatalogObserver();
-        this.threadsObserverService.startThreadUpdater();
         this.fileStasherService.startStasher();
     };
 
     stop() {
         this.fileStasherService.stopStasher();
-        this.threadsObserverService.stopThreadUpdater();
         this.threadsObserverService.stopCatalogObserver();
     };
 };
