@@ -271,8 +271,6 @@ class ThreadsObserverService extends EventEmitter {
             // If a post being deleted, then its files become deleted too (isDeleted is set to true).
             // The sequence of events for this case: ThreadModify -> PostDelete -> FileDelete.
             //
-            // If a thread being deleted, then nothing happens to its posts or files.
-            //
             // Events (ThreadDelete, ThreadNotFound, ThreadCreate) are single. It means that after firing
             // one of these events, events like (FileDelete, PostDelete) or (FileCreate, PostCreate) are
             // not being fired.
@@ -337,6 +335,7 @@ class ThreadsObserverService extends EventEmitter {
                 return;
             }
 
+            
             // Search for new or modified threads.
             let 
             /** @type {Thread} */ thread,
@@ -367,7 +366,7 @@ class ThreadsObserverService extends EventEmitter {
                             await wait(this.threadFetchDelay);
                         }
                     }
-                } else if(thread === null) {
+                } else {
                     try {
                         thread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, catalogThread.number);
                         await wait(this.threadFetchDelay);
