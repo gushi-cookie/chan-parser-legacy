@@ -335,7 +335,7 @@ class ThreadsObserverService extends EventEmitter {
                 return;
             }
 
-            
+
             // Search for new or modified threads.
             let 
             /** @type {Thread} */ thread,
@@ -376,8 +376,7 @@ class ThreadsObserverService extends EventEmitter {
                     }
 
                     if(thread === 404) {
-                        // TO-DO Log
-                        console.log('Thread not found 404.');
+                        this.emit(ThreadNotFoundEvent.name, new ThreadNotFoundEvent(catalogThread));
                         continue;
                     }
 
