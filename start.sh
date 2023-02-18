@@ -23,7 +23,7 @@ if [[ $empty_node_container == "true" ]]; then
                 node bash
                 
 else
-    mkdir -p /dev/shm/chan_parser
+    sudo -H -u \#1000 bash -c "mkdir -p /dev/shm/chan_parser"
     docker run  -it --rm \
                 --user 1000:1000 \
                 --volume $(pwd):/app \
