@@ -59,6 +59,20 @@ class ThreadsObserverService extends EventEmitter {
         return null;
     };
 
+    /**
+     * Search for a thread with the specified file.
+     * @param {File} file
+     * @returns {Thread | null}
+     */
+    getThreadByFile(file) {
+        for(let i = 0; i < this.threads.length; i++) {
+            if(this.threads[i].hasFile(file)) {
+                return this.threads[i];
+            }
+        }
+        return null;
+    };
+
 
 
     // ############

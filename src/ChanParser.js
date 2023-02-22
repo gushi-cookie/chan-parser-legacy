@@ -4,7 +4,7 @@ const FileStasherService = require('./services/file-stasher-service/FileStasherS
 module.exports = class ChanParser {
     constructor() {
         this.threadsObserverService = new ThreadsObserverService();
-        this.fileStasherService = new FileStasherService(this.threadsObserverService, true, '/home/node/output', false);
+        this.fileStasherService = new FileStasherService(this.threadsObserverService, true, '/home/node/output', false, 600000);
 
         this.threadsObserverService.on('thread-create', (tce) => {
             console.log('New thread! Num: ' + tce.thread.number);
@@ -23,7 +23,7 @@ module.exports = class ChanParser {
 
     start() {
         this.threadsObserverService.startCatalogObserver();
-        this.fileStasherService.startStasher();
+        this.fileStasherService.startStasher('suspicious');
     };
 
     stop() {

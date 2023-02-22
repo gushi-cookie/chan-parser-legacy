@@ -42,6 +42,20 @@ class Thread {
 
 
     /**
+     * Check if the thread has a file.
+     * @param {File} file 
+     * @returns {boolean}
+     */
+    hasFile(file) {
+        for(let i = 0; i < this.files.length; i++) {
+            if(this.files[i] === file) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    /**
      * Computes files amount in the thread.
      * @returns {number} Files amount.
      */
@@ -53,6 +67,18 @@ class Thread {
         });
         
         return result;
+    };
+    
+    /**
+     * Get files from posts.
+     * @returns {File[]}
+     */
+    getFiles() {
+        let files = [];
+        this.posts.forEach((post) => {
+            files = files.concat(post.files);
+        });
+        return files;
     };
 
 

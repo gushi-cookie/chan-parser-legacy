@@ -1,54 +1,81 @@
 const axios = require('axios');
 const mime = require('mime-types');
 const File = require('../../threads-observer-service/commons/File');
-const fs = require('fs').promises;
-const fsSync = require('fs');
-const StreamPromises = require('node:stream/promises');
+const fs = require('node:fs');
+const fsp = require('node:fs/promises');
+const StreamPromise = require('node:stream/promises');
 
+/**
+ * This class represents a single file with data and functional to download the file, store it in the programm and write it in the file system.
+ */
 class StashFile {
 
     /**
-     * 
-     * @param {string} url 
-     * @param {string} fileName 
-     * @param {string} outputDir 
-     * @param {string} subdirName pass null if no subdir.
+     * Create an instance of the StashFile class.
+     * @param {string} url http(s) address to the file.
+     * @param {string} fileName the name of the file.
+     * @param {string} outputDir path to a dir where to write the file. No '/' in the end.
+     * @param {string} subdirName additional directory in the outputDir path. Pass null if no subdir. No '/' in the name.
      */
     constructor(url, fileName, outputDir, subdirName) {
         if(outputDir[outputDir.length-1] === '/') {
             outputDir = outputDir.slice(0, outputDir.length-1);
         }
 
-        this.downloaded = false;
-        this.buffer = null;
-        this.fileExtension = null;
+        if(subdirName !== null) {
+            subdirName = subdirName.replace('/\//g', '');
+        }
 
-        this.url = url;
-        this.fileName = fileName;
-        this.outputDir = outputDir;
-        this.subdirName = subdirName;
+
+        /** @type {boolean}*/ this.isFetched = false;
+        /** @type {string} */ this.fileExtension = null;
+        /** @type {Stream} */ this.buffer = null;
+        /** @type {boolean}*/ this.notFound = false;
+
+        /** @type {string} */ this.url = url;
+        /** @type {string} */ this.fileName = fileName;
+        /** @type {string} */ this.subdirName = subdirName;
+        /** @type {string | null} */ this.outputDir = outputDir;
     };
+
 
 
     /**
-     * 
-     * @returns {string} path
+     * Form path to the file from the location data.
+     * @param {boolean} forFile
+     * @returns {string | null} path to the file.
      */
-    formFilePath() {
+    formOutputPath(forFile) {
+        let result;
+
         if(this.subdirName !== null) {
-            return `${this.outputDir}/${this.subdirName}/${this.fileName}.${this.fileExtension}`;
+            result = `${this.outputDir}/${this.subdirName}`;
         } else {
-            return `${this.outputDir}/${this.fileName}.${this.fileExtension}`;
+            result = `${this.outputDir}`;
         }
+
+        if(forFile) {
+            if(this.fileExtension === null) return null;
+            result += `/${this.fileName}.${this.fileExtension}`;
+        }
+
+        return result;
     };
     
+    /**
+     * 
+     */
+    async checkOutputDir() {
+        await fsp.mkdir(this.formOutputPath(false), {recursive: true});
+    };
 
     /**
      * Delete the file if it exists.
+     * @returns {boolean}
      */
     async deleteFile() {
         try {
-            await fs.rm(this.formFilePath());
+            await fsp.rm(this.formOutputPath(true));
         } catch(error) {
             if(error.code !== 'ENOENT') {
                 throw error;
@@ -58,11 +85,11 @@ class StashFile {
 
 
     /**
-     * Check if file exists in the file path.
+     * Check if the file exists.
      */
-    async exist() {
+    async checkFileExistence() {
         try {
-            await fs.stat(this.formFilePath);
+            await fs.stat(this.formOutputPath(true));
             return true;
         } catch(error) {
             if(error.code === 'ENOENT') {
@@ -74,12 +101,33 @@ class StashFile {
     };
 
 
-    async downloadFile() {
+    /**
+     * Write file from the buffer to the output directory.
+     * @param {boolean} clearBuffer clear buffer after successful writing the file.
+     */
+    async flush(clearBuffer) {
+        await this.checkOutputDir();
+        await StreamPromise.pipeline(this.buffer, fs.createWriteStream(this.formOutputPath(true)));
+
+        if(clearBuffer) {
+            this.buffer = null;
+        }
+    };
+
+
+    /**
+     * Fetch the file by the url and set it to the buffer.
+     * Method also sets fileExtension, notFound and isFetched variables.
+     * @returns {Promise.<number | void>} void on success or 404.
+     * @throws {AxiosError}
+     */
+    async fetchFile() {
         let res;
         try {
             res = await axios({url: this.url, responseType: 'stream', method: 'get'});
         } catch(error) {
             if(error.response && error.response.status === 404) {
+                this.notFound = true;
                 return 404;
             } else {
                 throw error;
@@ -89,7 +137,7 @@ class StashFile {
         if(typeof res.headers['content-type'] === 'string' && mime.extension(res.headers['content-type'])) {
             this.buffer = res.data;
             this.fileExtension = mime.extension(res.headers['content-type']);
-            this.downloaded = true;
+            this.isFetched = true;
         } else {
             let error = new Error('Content-Type header is not set or invalid.');
             error.response = res;
@@ -98,24 +146,12 @@ class StashFile {
     };
 
 
-    async flush(clearBuffer) {
-        try {
-            await StreamPromises.pipeline(this.buffer, fsSync.createWriteStream(this.formFilePath()));
-        } catch(error) {
-            throw error;
-        }
-        if(clearBuffer) {
-            this.buffer = null;
-        }
-    };
-
-
     /**
-     * Make StashFile instances from the File instance.
-     * @param {File} file 
-     * @param {string} outputDir
+     * Make two StashFile objects (file and thumbnail) from a File instance.
+     * @param {File} file ThreadsObserverService file.
+     * @param {string} outputDir path to an output directory.
      * @param {string} subdirName pass null if no subdir.
-     * @returns {Object} object with two fields: file, thumbnail.
+     * @returns {import('../FileStasherService').StashPair} object with two fields: file, thumbnail.
      */
     static makeFromFile(file, outputDir, subdirName) {
         return {
