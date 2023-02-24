@@ -4,6 +4,7 @@ const File = require('../../threads-observer-service/commons/File');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const StreamPromise = require('node:stream/promises');
+const Stream = require('node:stream');
 
 /**
  * This class represents a single file with data and functional to download the file, store it in the programm and write it in the file system.
@@ -107,7 +108,7 @@ class StashFile {
      */
     async flush(clearBuffer) {
         await this.checkOutputDir();
-        await StreamPromise.pipeline(this.buffer, fs.createWriteStream(this.formOutputPath(true)));
+        await StreamPromise.pipeline(Stream.Readable.from(this.buffer), fs.createWriteStream(this.formOutputPath(true)));
 
         if(clearBuffer) {
             this.buffer = null;
@@ -118,8 +119,11 @@ class StashFile {
     /**
      * Fetch the file by the url and set it to the buffer.
      * Method also sets fileExtension, notFound and isFetched variables.
+     * 
+     * Note that Axios doesn't fire error if connection is reset (forcibly closed by a peer; in some cases).
+     * This means that a fetched stream from response may be broken and, if try to read it, ECONNRESET error may to occur.
      * @returns {Promise.<number | void>} void on success or 404.
-     * @throws {AxiosError}
+     * @throws {AxiosError | ECONNRESET}
      */
     async fetchFile() {
         let res;
@@ -135,7 +139,17 @@ class StashFile {
         }
 
         if(typeof res.headers['content-type'] === 'string' && mime.extension(res.headers['content-type'])) {
-            this.buffer = res.data;
+            await new Promise((resolve, reject) => {
+                let stream = res.data;
+                let chunks = [];
+                stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+                stream.on('error', (error) => reject(error));
+                stream.on('end', () => {
+                    this.buffer = Buffer.concat(chunks);
+                    resolve();
+                });
+            });
+            
             this.fileExtension = mime.extension(res.headers['content-type']);
             this.isFetched = true;
         } else {

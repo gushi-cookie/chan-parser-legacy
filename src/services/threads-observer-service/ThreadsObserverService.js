@@ -35,7 +35,7 @@ class ThreadsObserverService extends EventEmitter {
         this.catalogObserverDelay = 2500;
         this.threadFetchDelay = 500;
 
-        this.imageBoard = '2ch';
+        this.imageBoard = '4chan';
         this.board = 'b';
     };
 

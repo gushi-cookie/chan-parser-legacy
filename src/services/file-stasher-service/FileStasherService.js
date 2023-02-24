@@ -40,7 +40,7 @@ class FileStasherService extends EventEmitter {
         /** @type {string}  */ this.outputDir = outputDir;
         /** @type {boolean} */ this.stashThumbnails = stashThumbnails;
         /** @type {number}  */ this.suspiciousInterval = suspiciousInterval;
-        /** @type {Array.<Timeout>} */ this.suspiciousTimeouts = [];
+        /** @type {Array.<Object>} */ this.suspiciousTimeouts = [];
 
 
         this.mode = null;
@@ -59,16 +59,11 @@ class FileStasherService extends EventEmitter {
     // ############
 
     /**
-     * Try to fetch files of a first stash pair that is not fetched yet.
+     * Try to fetch files of a stash pair.
      * @param {boolean} flush flush the stash pair on succeed.
-     * @returns {Promise.<StashPair | null>}
-     * @throws {AxiosError}
+     * @throws {AxiosError | ECONNRESET}
      */
-    async fetchNext(flush) {
-        /** @type {StashPair} */
-        let pair = this.getFirstNotFetchedPair();
-        if(pair === null) return null;
-
+    async fetchPair(pair, flush) {
         let result;
         if(this.stashThumbnails) {
             result = await pair.thumbnail.fetchFile();
@@ -77,8 +72,6 @@ class FileStasherService extends EventEmitter {
 
         result = await pair.file.fetchFile();
         if(result !== 404 && flush) await pair.file.flush(true);
-
-        return pair;
     };
     
 
@@ -96,6 +89,11 @@ class FileStasherService extends EventEmitter {
             throw new Error(`Mode: ${mode} is not supported.`);
         }
 
+        let wait = async (delay) => {
+            return new Promise((resolve) => { setTimeout(resolve, delay); });
+        };
+
+        this.mode = mode;
         await this.checkOutputDir();
 
 
@@ -111,15 +109,43 @@ class FileStasherService extends EventEmitter {
             this.fileCreateHandler = fileCreateHandler;
             this.threadsObserverService.on(FileCreateEvent.name, fileCreateHandler);
     
+
+            let allIn = async () => {
+                let pair = this.getFirstNotFetchedPair();
+                if(pair === null) return;
+                
+                let connResetOccurred = false;
+                try {
+                    await this.fetchPair(pair, true);
+                } catch(error) {
+                    if(error.code === 'ECONNRESET') {
+                        console.log(`Error 'ECONNRESET' occurred. URL: ${pair.file.url}. Second attempt to fetch the file.`);
+                        connResetOccurred = true;
+                    } else {
+                        // TO-DO Log error
+                        console.log(error);
+                        this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
+                        return;
+                    }
+                }
+
+                if(connResetOccurred) {
+                    try {
+                        await wait(this.stasherDelay);
+                        await this.fetchPair(pair, true);
+                    } catch(error) {
+                        console.log(`The second attempt of fetching the file has ended with error. URL: ${pair.file.url}`);
+                        console.log(error);
+                    }
+                }
+
+                this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
+            };
+
             // Starter.
             let recursiveTimer = async () => {
-                try {
-                    this.stasherRunning && await this.fetchNext(true);
-                } catch(error) {
-                    // TO-DO Log error
-                    console.log(error);
-                }
-                this.stasherRunning && await (new Promise((resolve) => { setTimeout(resolve, this.stasherDelay); }));
+                this.stasherRunning && await allIn();
+                this.stasherRunning && await wait(this.stasherDelay);
                 this.stasherRunning && recursiveTimer();
             };
 
@@ -168,8 +194,37 @@ class FileStasherService extends EventEmitter {
             this.threadsObserverService.on(ThreadDeleteEvent.name, threadDeleteHandler);
 
     
-            let afterFetchNext = (pair) => {
+            let suspicious = async () => {
+                let pair = this.getFirstNotFetchedPair();
                 if(pair === null) return;
+
+                let connResetOccurred = false;
+                try {
+                    await this.fetchPair(pair, false);
+                } catch(error) {
+                    if(error.code === 'ECONNRESET') {
+                        console.log(`Error 'ECONNRESET' occurred. URL: ${pair.file.url}. Second attempt to fetch the file.`);
+                        connResetOccurred = true;
+                    } else {
+                        // TO-DO Log error
+                        console.log(error);
+                        this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
+                        return;
+                    }
+                }
+
+                if(connResetOccurred) {
+                    try {
+                        await wait(this.stasherDelay);
+                        await this.fetchPair(pair, false);
+                    } catch(error) {
+                        console.log(`The second attempt of fetching the file has ended with error. URL: ${pair.file.url}`);
+                        console.log(error);
+                        this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
+                        return;
+                    }
+                }
+
 
                 if(pair.file.notFound) {
                     this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
@@ -178,6 +233,7 @@ class FileStasherService extends EventEmitter {
                     obj.pair = pair;
                     obj.timeout = setTimeout(() => {
                         this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
+                        this.suspiciousTimeouts.splice(this.suspiciousTimeouts.indexOf(obj), 1);
                     }, this.suspiciousInterval);
 
                     this.suspiciousTimeouts.push(obj);
@@ -186,15 +242,8 @@ class FileStasherService extends EventEmitter {
     
             // Starter.
             let recursiveTimer = async () => {
-                if(!this.stasherRunning) return;
-                try {
-                    let result = await this.fetchNext(false);
-                    afterFetchNext(result);
-                } catch(error) {
-                    // TO-DO Log error
-                    console.log(error);
-                }
-                this.stasherRunning && await (new Promise((resolve) => { setTimeout(resolve, this.stasherDelay); }));
+                this.stasherRunning && await suspicious();
+                this.stasherRunning && await wait(this.stasherDelay);
                 this.stasherRunning && recursiveTimer();
             };
 

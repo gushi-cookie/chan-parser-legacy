@@ -15,6 +15,11 @@ module.exports = class ChanParser {
         this.threadsObserverService.on('file-create', (fce) => {
             console.log('New file! Name: ' + fce.file.uploadName);
         });
+        this.threadsObserverService.on('post-delete', (pde) => {
+            console.log('############## POST DELETED');
+            console.log(pde.post.number);
+            console.log(pde.post.comment);
+        });
 
         setInterval(() => {
             console.log('S ' + this.threadsObserverService.threads.length);
