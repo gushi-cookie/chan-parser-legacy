@@ -1,10 +1,13 @@
 const ThreadsObserverService = require('./services/threads-observer-service/ThreadsObserverService');
 const FileStasherService = require('./services/file-stasher-service/FileStasherService');
+const WebService = require('./services/web-service/WebService');
 
 module.exports = class ChanParser {
     constructor() {
+        require('dotenv').config();
         this.threadsObserverService = new ThreadsObserverService();
         this.fileStasherService = new FileStasherService(this.threadsObserverService, true, '/home/node/output', false, 600000);
+        this.webService = new WebService();
 
         this.threadsObserverService.on('thread-create', (tce) => {
             console.log('New thread! Num: ' + tce.thread.number);

@@ -29,5 +29,6 @@ else
                 --volume $(pwd):/app \
                 --volume /dev/shm/chan_parser:/home/node/output \
                 --name running-chan-parser \
+                --publish 127.0.0.1:8080:8080 \
                 chan-parser
 fi
