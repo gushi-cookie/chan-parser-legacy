@@ -17,7 +17,7 @@ class FileQueries {
         `CREATE TABLE IF NOT EXISTS files (
             id            INTEGER PRIMARY KEY,
             post_id       INTEGER NOT NULL,
-            index         INTEGER NOT NULL,
+            list_index    INTEGER NOT NULL,
             url           TEXT NOT NULL,
             thumbnail_url TEXT NOT NULL,
             upload_name   TEXT NOT NULL,
@@ -51,7 +51,7 @@ class FileQueries {
 
         let file = new File(row.url, row.thumbnail_url, row.upload_name, row.cdn_name, row.check_sum, row.is_deleted);
         file.id = row.id;
-        file.index = row.index;
+        file.listIndex = row.list_index;
         return file;
     };
 
@@ -74,7 +74,7 @@ class FileQueries {
             row = rows[i];
             file = new File(row.url, row.thumbnail_url, row.upload_name, row.cdn_name, row.check_sum, row.is_deleted);
             file.id = row.id;
-            file.index = row.index;
+            file.listIndex = row.list_index;
             files.push(file);
         }
 

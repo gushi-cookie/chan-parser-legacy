@@ -13,7 +13,7 @@ class PostQueries {
             id               PRIMARY KEY,
             thread_id        INTEGER NOT NULL,
             number           INTEGER NOT NULL,
-            index            INTEGER NOT NULL,
+            list_index       INTEGER NOT NULL,
             create_timestamp INTEGER NOT NULL,
             name             TEXT NOT NULL,
             comment          TEXT NOT NULL,
@@ -44,7 +44,7 @@ class PostQueries {
         let files = await this.fileQueries.selectFilesOfPost(row.id);
         let post = new Post(row.number, row.create_timestamp, row.name, row.comment, files, row.is_banned, row.is_deleted, row.is_op);
         post.id = row.id;
-        post.index = row.index;
+        post.listIndex = row.list_index;
         return post;
     };
 
@@ -67,7 +67,7 @@ class PostQueries {
 
             post = new Post(row.number, row.create_timestamp, row.name, row.comment, files, row.is_banned, row.is_deleted, row.is_op);
             post.id = row.id;
-            post.index = row.index;
+            post.listIndex = row.list_index;
 
             posts.push(post);
         }
