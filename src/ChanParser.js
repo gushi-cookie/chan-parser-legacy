@@ -1,10 +1,12 @@
 const ThreadsObserverService = require('./services/threads-observer-service/ThreadsObserverService');
 const FileStasherService = require('./services/file-stasher-service/FileStasherService');
 const WebService = require('./services/web-service/WebService');
+const DatabaseService = require('./services/database-service/DatabaseService');
 
 module.exports = class ChanParser {
     constructor() {
         require('dotenv').config();
+        this.databaseService = new DatabaseService();
         this.threadsObserverService = new ThreadsObserverService();
         this.fileStasherService = new FileStasherService(this.threadsObserverService, true, '/home/node/output', false, 600000);
         this.webService = new WebService();
@@ -29,13 +31,15 @@ module.exports = class ChanParser {
         }, 3000);
     };
 
-    start() {
+    async start() {
+        await this.databaseService.startDatabase();
         this.threadsObserverService.startCatalogObserver();
         this.fileStasherService.startStasher('suspicious');
     };
 
-    stop() {
+    async stop() {
         this.fileStasherService.stopStasher();
         this.threadsObserverService.stopCatalogObserver();
+        await this.databaseService.stopDatabase();
     };
 };
