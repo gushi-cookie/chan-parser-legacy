@@ -28,6 +28,8 @@ class Thread {
      * @param {string} imageBoard image board's name.
      */
     constructor(number, title, board, postersCount, posts, createTimestamp, viewsCount, lastActivity, imageBoard) {
+        this.id = null;
+        
         this.number = number;
         this.title = title;
         this.board = board;
@@ -92,7 +94,9 @@ class Thread {
             posts.push(post.clone());
         });
 
-        return new Thread(this.number, this.title, this.board, this.postersCount, posts, this.createTimestamp, this.viewsCount, this.lastActivity, this.imageBoard);
+        let thread = new Thread(this.number, this.title, this.board, this.postersCount, posts, this.createTimestamp, this.viewsCount, this.lastActivity, this.imageBoard);
+        thread.id = this.id;
+        return thread;
     };
 
 
@@ -167,8 +171,8 @@ class Thread {
     static parseFrom2chJson(object) {
         let posts = [];
         if(object.threads[0].posts !== null) {
-            object.threads[0].posts.forEach((item) => {
-                posts.push(Post.parseFrom2chJson(item));
+            object.threads[0].posts.forEach((item, index) => {
+                posts.push(Post.parseFrom2chJson(item, index));
             });
         }
 
@@ -187,8 +191,8 @@ class Thread {
      */
     static parseFrom4chanJson(board, object) {
         let posts = [];
-        object.posts.forEach((post) => {
-            posts.push(Post.parseFrom4chanJson(board, post));
+        object.posts.forEach((post, index) => {
+            posts.push(Post.parseFrom4chanJson(board, post, index));
         });
 
         let op = object.posts[0];

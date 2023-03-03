@@ -20,6 +20,7 @@ class File {
 
     /**
      * Create an instance of the File class.
+     * @param {number} listIndex
      * @param {string} url 
      * @param {string} thumbnailUrl 
      * @param {string} uploadName 
@@ -29,7 +30,10 @@ class File {
      * 
      * @returns {File} New file instance
      */
-    constructor(url, thumbnailUrl, uploadName, cdnName, checkSum, isDeleted) {
+    constructor(listIndex, url, thumbnailUrl, uploadName, cdnName, checkSum, isDeleted) {
+        this.id = null;
+
+        this.listIndex = listIndex;
         this.url = url;
         this.thumbnailUrl = thumbnailUrl;
         this.uploadName = uploadName;
@@ -62,7 +66,9 @@ class File {
      * @returns {File} clone of this instance.
      */
     clone() {
-        return new File(this.url, this.thumbnailUrl, this.uploadName, this.cdnName, this.checkSum, this.isDeleted);
+        let file = new File(this.listIndex, this.url, this.thumbnailUrl, this.uploadName, this.cdnName, this.checkSum, this.isDeleted);
+        file.id = this.id;
+        return file;
     };
 
 
@@ -196,9 +202,10 @@ class File {
 
     /**
      * @param {any} object Parsed data object from 2ch API.
+     * @param {number} listIndex The file's index in files list.
      * @returns {File} New File instance
      */
-    static parseFrom2chJson(object) {
+    static parseFrom2chJson(object, listIndex) {
         let index = object.fullname.lastIndexOf('.');
         if(index >= 0) object.fullname = object.fullname.slice(0, index);
 
@@ -206,7 +213,8 @@ class File {
         if(index >= 0) object.name = object.name.slice(0, index);
 
         
-        return new File(`https://2ch.hk${object.path}`,
+        return new File(listIndex,
+                        `https://2ch.hk${object.path}`,
                         `https://2ch.hk${object.thumbnail}`, 
                         object.fullname,
                         object.name,
@@ -218,10 +226,12 @@ class File {
     /**
      * @param {string} board
      * @param {Object} object Parsed data object from 4chan API.
+     * @param {number} listIndex The file's index in files list.
      * @returns {File} New File instance
      */
-    static parseFrom4canJson(board, object) {
-        return new File(`https://i.4cdn.org/${board}/${object.tim}${object.ext}`,
+    static parseFrom4canJson(board, object, listIndex) {
+        return new File(listIndex,
+                        `https://i.4cdn.org/${board}/${object.tim}${object.ext}`,
                         `https://i.4cdn.org/${board}/${object.tim}s.jpg`,
                         object.filename, object.tim, object.md5, false);
     };

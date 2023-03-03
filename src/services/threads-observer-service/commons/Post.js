@@ -24,6 +24,7 @@ class Post {
 
     /**
      * Create an instance of the Post class.
+     * @param {number} listIndex
      * @param {number} number 
      * @param {number} createTimestamp 
      * @param {string} name 
@@ -33,7 +34,10 @@ class Post {
      * @param {boolean} isDeleted 
      * @param {boolean} isOp 
      */
-    constructor(number, createTimestamp, name, comment, files, isBanned, isDeleted, isOp) {
+    constructor(listIndex, number, createTimestamp, name, comment, files, isBanned, isDeleted, isOp) {
+        this.id = null;
+
+        this.listIndex = listIndex;
         this.number = number;
         this.createTimestamp = createTimestamp;
         this.name = name;
@@ -98,7 +102,9 @@ class Post {
             files.push(file.clone());
         });
 
-        return new Post(this.number, this.createTimestamp, this.name, this.comment, files, this.isBanned, this.isDeleted, this.isOp);
+        let post = new Post(this.listIndex, this.number, this.createTimestamp, this.name, this.comment, files, this.isBanned, this.isDeleted, this.isOp);
+        post.id = this.id;
+        return post;
     };
     
 
@@ -209,17 +215,18 @@ class Post {
 
     /**
      * @param {*} object Parsed data object from 2ch API.
+     * @param {number} listIndex The post's index in posts list.
      * @returns {Post} New Post instance.
      */
-    static parseFrom2chJson(object) {
+    static parseFrom2chJson(object, listIndex) {
         let files = [];
         if(object.files !== null) {
-            object.files.forEach((item) => {
-                files.push(File.parseFrom2chJson(item));
+            object.files.forEach((item, index) => {
+                files.push(File.parseFrom2chJson(item, index));
             });
         }
         
-        return new Post(object.num, object.timestamp, object.name, object.comment, files, 
+        return new Post(listIndex, object.num, object.timestamp, object.name, object.comment, files, 
                         object.banned ? true : false,
                         false,
                         object.op ? true : false);
@@ -229,15 +236,16 @@ class Post {
     /**
      * @param {string} board
      * @param {*} object Parsed data object from 4chan API.
+     * @param {number} listIndex The post's index in posts list.
      * @returns {Post} New Post instance.
      */
-    static parseFrom4chanJson(board, object) {
+    static parseFrom4chanJson(board, object, listIndex) {
         let files = [];
         if(object.filename !== undefined) {
-            files.push(File.parseFrom4canJson(board, object));
+            files.push(File.parseFrom4canJson(board, object, 0));
         }
 
-        return new Post(object.no, object.time, object.name, object.com === undefined ? '' : object.com, files, false, false, object.sub !== undefined);
+        return new Post(listIndex, object.no, object.time, object.name, object.com === undefined ? '' : object.com, files, false, false, object.sub !== undefined);
     };
 };
 

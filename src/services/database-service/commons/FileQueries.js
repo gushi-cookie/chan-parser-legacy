@@ -49,9 +49,8 @@ class FileQueries {
         let row = await DBUtils.wrapGetQuery(sql, [], this.database);
         if(row === null) return null;
 
-        let file = new File(row.url, row.thumbnail_url, row.upload_name, row.cdn_name, row.check_sum, row.is_deleted);
+        let file = new File(row.list_index, row.url, row.thumbnail_url, row.upload_name, row.cdn_name, row.check_sum, row.is_deleted);
         file.id = row.id;
-        file.listIndex = row.list_index;
         return file;
     };
 
@@ -72,9 +71,8 @@ class FileQueries {
         let row;
         for(let i = 0; i < rows.length; i++) {
             row = rows[i];
-            file = new File(row.url, row.thumbnail_url, row.upload_name, row.cdn_name, row.check_sum, row.is_deleted);
+            file = new File(row.list_index, row.url, row.thumbnail_url, row.upload_name, row.cdn_name, row.check_sum, row.is_deleted);
             file.id = row.id;
-            file.listIndex = row.list_index;
             files.push(file);
         }
 
