@@ -1,32 +1,59 @@
 const express = require('express');
 const serveIndex = require('serve-index');
 
+/**
+ * Class that works with express.js's app.
+ */
 class App {
+
+    /**
+     * Create an instance of the App class.
+     * @param {number} port Http's server port.
+     */
     constructor(port) {
         this.appPath = process.env.WEB_SERVICE_APP_PATH;
         this.mediaPath = process.env.WEB_SERVICE_MEDIA_PATH;
         this.port = port;
 
-        let app = express();
-        this.app = app;
+        this.app = express();
         this.server = null;
+    };
 
+    
+    /**
+     * Initialize express app and run it.
+     */
+    async startServer() {
+        let app = this.app;
         app.set('view engine', 'ejs');
         app.use('/public', express.static(`${this.appPath}/public`), serveIndex(`${this.appPath}/public`, {icons: true}));
-        app.use('/cdn', express.static(this.mediaPath), serveIndex(this.mediaPath, {icons: true}));
+        app.use(require('./routes/cdn'));
         app.use(require('./routes/home'));
         app.use(require('./routes/threads'));
         app.use(require('./routes/catalog-threads'));
-    };
 
-    startServer() {
-        this.server = this.app.listen(this.port, () => {
-            console.log(`App started on port ${this.port}.`);
+        return new Promise((resolve) => {
+            this.server = this.app.listen(this.port, (error) => {
+                if(error) throw error;
+                console.log(`App started on port ${this.port}.`);
+                resolve();
+            });
         });
+        
     };
 
-    stopStop() {
-        this.server.close();
+    /**
+     * Stop the express app.
+     */
+    async stopServer() {
+        return new Promise((resolve) => {
+            this.server.close((error) => {
+                // TO-DO Log.
+                if(error) throw error;
+                console.log('App has stopped.');
+                resolve();
+            });
+        });
     };
 };
 

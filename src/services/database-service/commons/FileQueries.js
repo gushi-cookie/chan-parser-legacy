@@ -43,6 +43,28 @@ class FileQueries {
         await DBUtils.wrapExecQuery(sql, this.database);
     };
 
+
+    /**
+     * Select a specific file by its id.
+     * @param {number} id Id of the file.
+     * @param {boolean} includeData Should data column be included.
+     * @returns {Promise.<StoredFile | null>}
+     * @throws {SQLiteError}
+     */
+    async selectFileById(id, includeData) {
+        let sql;
+        if(includeData) {
+            sql = 
+            `SELECT * FROM files WHERE id = ${id};`;
+        } else {
+            sql = 
+            `SELECT id, post_id, index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
+                FROM files WHERE id = ${id};`;
+        }
+
+        return StoredFile.makeFromTableRow(await DBUtils.wrapGetQuery(sql, [], this.database));
+    };
+
     /**
      * Select the first file of a specific post, by its list_index column.
      * @param {number} postId Id of the post.
