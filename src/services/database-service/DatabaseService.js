@@ -4,7 +4,14 @@ const PostQueries = require('./commons/PostQueries');
 const ThreadQueries = require('./commons/ThreadQueries');
 const DBUtils = require('./commons/DBUtils');
 
+/**
+ * Class represents a service that works with SQLite3 database.
+ */
 class DatabaseService {
+
+    /**
+     * Create an instance of the DatabaseService class.
+     */
     constructor() {
         this.database = null;
 
@@ -13,6 +20,10 @@ class DatabaseService {
         this.threadQueries = null;
     };
 
+    /**
+     * Start the database.
+     * @throws {SQLiteError}
+     */
     async startDatabase() {
         await new Promise((resolve) => {
             this.database = new sqlite3.Database(`${process.env.OUTPUT_PATH}/result.db`,
@@ -34,6 +45,10 @@ class DatabaseService {
         await this.fileQueries.createTable();
     };
 
+    /**
+     * Stop the database.
+     * @throws {SQLiteError}
+     */
     async stopDatabase() {
         await new Promise((resolve) => {
             this.database.close((error) => {
