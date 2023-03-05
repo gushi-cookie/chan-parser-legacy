@@ -1,5 +1,6 @@
 const Post = require("../../threads-observer-service/commons/Post");
 const Thread = require("../../threads-observer-service/commons/Thread");
+const DBUtils = require('./DBUtils');
 
 /**
  * Class represents the threads database table.
@@ -31,6 +32,19 @@ class StoredThread {
 
 
     /**
+     * Convert a class's field to snake case. 
+     * @param {string} name Name of the field.
+     * @throws {Error} Thrown if a prototype of the class has no property with the passed name.
+     */
+    static convertFieldToSnakeCase(name) {
+        if(!Object.getOwnPropertyNames(new StoredThread()).includes(name)) {
+            throw new Error(`Class StoredThread has no a field with the name: ${name}.`);
+        }
+        return DBUtils.camelToSnakeCase(name);
+    };
+
+
+    /**
      * Create a StoredThread instance from the thread table row.
      * 
      * Note: all columns from the table are required, except for NULLABLE ones.
@@ -40,6 +54,16 @@ class StoredThread {
     static makeFromTableRow(row) {
         return new StoredThread(row.id, row.board, row.image_board, row.number, row.title, row.posters_count, row.create_timestamp, row.views_count, row.last_activity);
     };
+
+    /**
+     * Form a StoredThread instance from an observer Thread instance.
+     * @param {Thread} thread
+     * @returns {StoredThread}
+     */
+    static makeFromObserverFile(thread) {
+        return new StoredThread(thread.id, thread.board, thread.imageBoard, thread.number, thread.title, thread.postersCount, thread.createTimestamp, thread.viewsCount, thread.lastActivity);
+    };
+
 
     /**
      * Convert this thread to the Thread type of the ThreadsObserverService service.

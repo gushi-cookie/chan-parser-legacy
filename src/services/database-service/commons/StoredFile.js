@@ -1,6 +1,6 @@
 const File = require('../../threads-observer-service/commons/File');
 const StashFile = require('../../file-stasher-service/commons/StashFile');
-
+const DBUtils = require('./DBUtils');
 
 /**
  * Class represents the files database table.
@@ -38,6 +38,19 @@ class StoredFile {
 
 
     /**
+     * Convert a class's field to snake case. 
+     * @param {string} name Name of the field.
+     * @throws {Error} Thrown if a prototype of the class has no property with the passed name.
+     */
+    static convertFieldToSnakeCase(name) {
+        if(!Object.getOwnPropertyNames(new StoredFile()).includes(name)) {
+            throw new Error(`Class StoredFile has no a field with the name: ${name}.`);
+        }
+        return DBUtils.camelToSnakeCase(name);
+    };
+
+
+    /**
      * Create a StoredFile instance from the files table row.
      * 
      * Note: all columns from the table are required, except for NULLABLE ones.
@@ -52,6 +65,29 @@ class StoredFile {
 
         return file;
     };
+
+    /**
+     * Form a StoredFile instance from an observer File instance.
+     * @param {File} file
+     * @returns {StoredFile}
+     */
+    static makeFromObserverFile(file) {
+        return new StoredFile(file.id, file.postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, null, null);
+    };
+
+    /**
+     * Form a StoredFile instance from both an observer File and a StashFile.
+     * @param {File} observerFile 
+     * @param {StashFile} stashFile 
+     * @returns {StoredFile}
+     */
+    static makeFromStashFile(observerFile, stashFile) {
+        let file = StoredFile.makeFromObserverFile(observerFile);
+        file.extension = stashFile.fileExtension;
+        file.data = stashFile.buffer;
+        return file;
+    };
+
 
     /**
      * Convert this file to the File type of the ThreadsObserverService service.

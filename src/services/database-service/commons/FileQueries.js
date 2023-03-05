@@ -23,7 +23,7 @@ class FileQueries {
     async createTable() {
         let sql = 
         `CREATE TABLE IF NOT EXISTS files (
-            id            INTEGER PRIMARY KEY,
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
             post_id       INTEGER NOT NULL,
             list_index    INTEGER NOT NULL,
             url           TEXT NOT NULL,
@@ -150,6 +150,51 @@ class FileQueries {
             files.push(StoredFile.makeFromTableRow(rows[i]));
         }
         return files;
+    };
+
+
+    /**
+     * Insert a file in the files table.
+     * 
+     * Note: id property of the file may be null.
+     * @param {StoredFile} file File to be inserted.
+     * @param {number} postId Id of a post associated with this file.
+     * @returns {Promise.<number>} Id of the inserted file.
+     * @throws {SQLiteError}
+     */
+    async insertFile(file, postId) {
+        let sql = 
+        `INSERT INTO files(id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension, data)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+        
+        let result = await DBUtils.wrapRunQuery(sql, [file.id, postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, file.extension, file.data], this.database);
+        return result.lastID;
+    };
+
+
+    /**
+     * Update columns of a stored file in the files table.
+     * 
+     * Note: id property shouldn't be null.
+     * @param {StoredFile} file File to be updated.
+     * @param {String[]} fields Names of the StoredFile class's fields to update.
+     * @throws {SQLiteError}
+     */
+    async updateFile(file, fields) {
+        let sets = '';
+        fields.forEach((field) => {
+            sets += `${StoredFile.convertFieldToSnakeCase(field)} = ?,`;
+        });
+        sets = sets.slice(0, sets.length - 1);
+
+        let sql = `UPDATE files SET ${sets} WHERE id = ${file.id};`;
+
+        let params = [];
+        fields.forEach((field) => {
+            params.push(file[field]);
+        });
+
+        await DBUtils.wrapExecQuery(sql, params, this.database);
     };
 };
 

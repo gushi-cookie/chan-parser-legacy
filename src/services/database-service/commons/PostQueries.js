@@ -21,13 +21,13 @@ class PostQueries {
 
 
     /**
-     * Create files table if not exists, in the database.
+     * Create posts table if not exists, in the database.
      * @throws {SQLiteError}
      */
     async createTable() {
         let sql = 
         `CREATE TABLE IF NOT EXISTS posts (
-            id               PRIMARY KEY,
+            id               PRIMARY KEY AUTOINCREMENT,
             thread_id        INTEGER NOT NULL,
             number           INTEGER NOT NULL,
             list_index       INTEGER NOT NULL,
@@ -78,6 +78,51 @@ class PostQueries {
             posts.push(StoredPost.makeFromTableRow(rows[i]));
         }
         return posts;
+    };
+
+
+    /**
+     * Insert a post in the posts table.
+     * 
+     * Note: id property of the post may be null.
+     * @param {StoredPost} post Post to be inserted.
+     * @param {number} threadId Id of a thread associated with this post.
+     * @returns {Promise.<number>} Id of the inserted post.
+     * @throws {SQLiteError}
+     */
+    async insertPost(post, threadId) {
+        let sql =
+        `INSERT INTO posts(id, thread_id, number, list_index, create_timestamp, name, comment, is_banned, is_deleted, is_op)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+        let result = await DBUtils.wrapRunQuery(sql, [post.id, threadId, post.number, post.listIndex, post.createTimestamp, post.name, post.comment, post.isBanned, post.isDeleted, post.isOp], this.database);
+        return result.lastID;
+    };
+
+
+    /**
+     * Update columns of a stored post in the posts table.
+     * 
+     * Note: id property shouldn't be null.
+     * @param {StoredPost} post Post to be updated.
+     * @param {String[]} fields Names of the StoredPost class's fields to update.
+     * @throws {SQLiteError}
+     */
+    async updatePost(post, fields) {
+        let sets = '';
+        fields.forEach((field) => {
+            sets += `${StoredPost.convertFieldToSnakeCase(field)} = ?,`;
+        });
+        sets = sets.slice(0, sets.length - 1);
+
+        let sql = `UPDATE posts SET ${sets} WHERE id = ${post.id};`;
+
+        let params = [];
+        fields.forEach((field) => {
+            params.push(post[field]);
+        });
+
+        await DBUtils.wrapExecQuery(sql, params, this.database);
     };
 };
 

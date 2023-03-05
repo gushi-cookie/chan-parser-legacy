@@ -29,7 +29,7 @@ class ThreadQueries {
     async createTable() {
         let sql = 
         `CREATE TABLE IF NOT EXISTS threads (
-            id               PRIMARY KEY,
+            id               PRIMARY KEY AUTOINCREMENT,
             board            TEXT NOT NULL,
             image_board      TEXT NOT NULL,
             number           INTEGER NOT NULL,
@@ -42,6 +42,7 @@ class ThreadQueries {
 
         await DBUtils.wrapExecQuery(sql, this.database);
     };
+
 
     /**
      * Select a specific thread.
@@ -121,6 +122,50 @@ class ThreadQueries {
             posts,
             files,
         }
+    };
+
+
+    /**
+     * Insert a thread in the threads table.
+     * 
+     * Note: id property of the thread may be null.
+     * @param {StoredThread} thread Thread to be inserted.
+     * @returns {Promise.<number>} Id of the inserted thread.
+     * @throws {SQLiteError}
+     */
+    async insertThread(thread) {
+        let sql =
+        `INSERT INTO threads(id, board, image_board, number, title, posters_count, create_timestamp, views_count, last_activity)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+        let result = await DBUtils.wrapRunQuery(sql, [thread.id, thread.board, thread.imageBoard, thread.number, thread.title, thread.postersCount, thread.createTimestamp, thread.viewsCount, thread.lastActivity], this.database);
+        return result.lastID;
+    };
+
+
+    /**
+     * Update columns of a stored thread in the threads table.
+     * 
+     * Note: id property shouldn't be null.
+     * @param {StoredThread} thread Thread to be updated.
+     * @param {String[]} fields Names of the StoredThread class's fields to update.
+     * @throws {SQLiteError}
+     */
+    async updateThread(thread, fields) {
+        let sets = '';
+        fields.forEach((field) => {
+            sets += `${StoredThread.convertFieldToSnakeCase(field)} = ?,`;
+        });
+        sets = sets.slice(0, sets.length - 1);
+
+        let sql = `UPDATE threads SET ${sets} WHERE id = ${thread.id};`;
+
+        let params = [];
+        fields.forEach((field) => {
+            params.push(thread[field]);
+        });
+
+        await DBUtils.wrapExecQuery(sql, params, this.database);
     };
 };
 

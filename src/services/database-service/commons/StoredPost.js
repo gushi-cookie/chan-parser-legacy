@@ -1,4 +1,5 @@
 const Post = require("../../threads-observer-service/commons/Post");
+const DBUtils = require('./DBUtils');
 
 /**
  * Class represents the posts database table.
@@ -32,6 +33,19 @@ class StoredPost {
 
 
     /**
+     * Convert a class's field to snake case. 
+     * @param {string} name Name of the field.
+     * @throws {Error} Thrown if a prototype of the class has no property with the passed name.
+     */
+    static convertFieldToSnakeCase(name) {
+        if(!Object.getOwnPropertyNames(new StoredPost()).includes(name)) {
+            throw new Error(`Class StoredPost has no a field with the name: ${name}.`);
+        }
+        return DBUtils.camelToSnakeCase(name);
+    };
+
+
+    /**
      * Create a StoredPost instance from the posts table row.
      * 
      * Note: all columns from the table are required, except for NULLABLE ones.
@@ -41,6 +55,16 @@ class StoredPost {
     static makeFromTableRow(row) {
         return new StoredPost(row.id, row.thread_id, row.number, row.list_index, row.create_timestamp, row.name, row.comment, Boolean(row.is_banned), Boolean(row.is_deleted), Boolean(row.is_op));
     };
+
+    /**
+     * Form a StoredPost instance from an observer Post instance.
+     * @param {Post} post
+     * @returns {StoredPost}
+     */
+    static makeFromObserverFile(post) {
+        return new StoredPost(post.id, post.threadId, post.number, post.listIndex, post.createTimestamp, post.name, post.comment, post.isBanned, post.isDeleted, post.isOp);
+    };
+
 
     /**
      * Convert this post to the Post type of the ThreadsObserverService service.
