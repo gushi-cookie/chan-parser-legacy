@@ -44,7 +44,7 @@ class ChanParser {
         process.database = this.databaseService;
 
         await this.databaseService.startDatabase();
-        this.threadsObserverService.startCatalogObserver();
+        await this.threadsObserverService.startCatalogObserver();
         this.fileStasherService.startStasher('suspicious');
         await this.webService.startService();
     };
@@ -55,7 +55,7 @@ class ChanParser {
     async stop() {
         await this.webService.stopService();
         this.fileStasherService.stopStasher();
-        this.threadsObserverService.stopCatalogObserver();
+        await this.threadsObserverService.stopCatalogObserver();
         await this.databaseService.stopDatabase();
 
         process.database = undefined;

@@ -2,6 +2,9 @@ const axios = require('axios');
 const Thread = require('./commons/Thread');
 const CatalogThread = require('./commons/CatalogThread');
 const EventEmitter = require('events');
+const StoredThread = require('../database-service/commons/StoredThread');
+const StoredPost = require('../database-service/commons/StoredPost');
+const StoredFile = require('../database-service/commons/StoredFile');
 
 const ThreadCreateEvent = require('./events/ThreadCreateEvent');
 const ThreadDeleteEvent = require('./events/ThreadDeleteEvent');
@@ -26,6 +29,10 @@ class ThreadsObserverService extends EventEmitter {
      */
     constructor() {
         super();
+
+        /** @type {import('../database-service/DatabaseService')} */
+        this.database = null;
+
         this.threads = [];
 
         this.catalogWhitelist = [];
@@ -178,251 +185,399 @@ class ThreadsObserverService extends EventEmitter {
 
 
 
+    // #################
+    // Database controls
+    // #################
+
+    /**
+     * Get all not deleted threads from the database.
+     * @throws {SQLiteError}
+     */
+    async _getStoredThreads() {
+        let unwrapTree = (tree) => {
+            let posts = new Array();
+            let files = new Map();
+
+            tree.files.forEach((storedFile) => {
+                if(!files.has(storedFile.postId)) {
+                    files.set(storedFile.postId, []);
+                }
+                files.get(storedFile.postId).push(storedFile.toObserverFile());
+            });
+
+            tree.posts.forEach((storedPost) => {
+                if(files.has(storedPost.id)) {
+                    posts.push(storedPost.toObserverPost(files.get(storedPost.id)));
+                }
+            });
+
+            return tree.thread.toObserverThread(posts);
+        };
+        let headers = await this.database.threadQueries.selectThreads(this.imageBoard, this.board, false);
+
+        let tree;
+        let thread;
+        for(let i = 0; i < headers.length; i++) {
+            tree = await this.database.threadQueries.selectThreadTree(this.imageBoard, this.board, headers[i].id);
+            this.threads.push(unwrapTree(tree));
+        }
+    };
+
+
+    /**
+     * Insert a thread, its posts and files, in the database.
+     * 
+     * Note: method should be used if the thread's id is null.
+     * @param {Thread} thread Thread to be inserted in the database. 
+     * @throws {SQLiteError}
+     */
+    async _insertThreadTree(thread) {
+        thread.id = await this.database.threadQueries.insertThread(StoredThread.makeFromObserverThread(thread));
+
+        let post;
+        let sPost;
+        let sFile;
+        for(let i = 0; i < thread.posts.length; i++) {
+            post = thread.posts[i];
+            sPost = StoredPost.makeFromObserverPost(post);
+            post.id = await this.database.postQueries.insertPost(sPost, thread.id);
+
+            for(let j = 0; j < post.files.length; j++) {
+                sFile = StoredFile.makeFromObserverFile(post.files[j]);
+                post.files[j].id = await this.database.fileQueries.insertFile(sFile, post.id);
+            }
+        }
+    };
+
+
+    /**
+     * Update a thread's specific fields in the database.
+     * 
+     * @param {Thread} thread 
+     * @param {String[]} fields 
+     * @throws {SQLiteError}
+     */
+    async _updateThread(thread, fields) {
+        let sThread = StoredThread.makeFromObserverThread(thread);
+        await this.database.threadQueries.updateThread(sThread, fields);
+    };
+
+
+    /**
+     * Update a post's specific fields in the database.
+     * 
+     * @param {Post} post 
+     * @param {String[]} fields 
+     * @throws {SQLiteError}
+     */
+    async _updatePost(post, fields) {
+        let sPost = StoredPost.makeFromObserverPost(post);
+        await this.database.postQueries.updatePost(sPost, fields);
+    };
+
+
+    /**
+     * Update a file's specific fields in the database.
+     * 
+     * @param {File} file 
+     * @param {String[]} fields 
+     * @throws {SQLiteError}
+     */
+    async _updateFile(file, fields) {
+        let sFile = StoredFile.makeFromObserverFile(file);
+        await this.database.fileQueries.updateFile(sFile, fields);
+    };
+
+
+
     // #########################
     // Catalog observer controls
     // #########################
 
     /**
-     * Start catalog observer timers.
+     * Work with an axios error.
+     * @param {AxiosError} error 
      */
-    startCatalogObserver() {
-        let handleFetchErrors = (error) => {
-            // TO-DO Log error
-            console.log(error.message);
-        };
+    _handleFetchErrors(error) {
+        // TO-DO Log error
+        console.log(error.message);
+    };
 
-        let wait = async (delay) => {
-            return new Promise((resolve) => { setTimeout(resolve, delay); });
-        };
+    /**
+     * Work with an sqlite error.
+     * @param {SQLiteError} error 
+     */
+    _handleDatabaseErrors(error) {
+        // TO-DO Log error
+        console.log(error);
+    };
 
-        
-        let handleFilesDiff = (thread, post, fad) => {
-            /** @type {import('./commons/File').FileArraysDiff} */
-            let fileArraysDiff = fad;
+    /**
+     * Delay a current thread (current code execution).
+     * @param {number} delay Delay in milliseconds.
+     */
+    async _wait(delay) {
+        return new Promise((resolve) => { setTimeout(resolve, delay); });
+    };
 
-            // Handle deleted files.
-            fileArraysDiff.filesWithoutPair1.forEach((file) => {
-                if(!file.isDeleted) {
-                    file.isDeleted = true;
-                    this.emit(FileDeleteEvent.name, new FileDeleteEvent(thread, post, file));
-                }
-            });
 
-            // Handle new files.
-            fileArraysDiff.filesWithoutPair2.forEach((file) => {
-                post.files.push(file);
-                this.emit(FileCreateEvent.name, new FileCreateEvent(thread, post, file));
-            });
+    /**
+     * Handle FileArraysDiff object, with firing events.
+     * @param {Thread} thread 
+     * @param {Post} post 
+     * @param {import('./commons/File').FileArraysDiff} fad 
+     */
+    _handleFilesDiff(thread, post, fad) {
+        let fileArraysDiff = fad;
 
-            // Handle files differences.
-            /** @type {import('./commons/File').FilesDiff} */
-            let filesDiff;
-            fileArraysDiff.differences.forEach((fd) => {
-                filesDiff = fd;
-                this.emit(FileModifyEvent.name, new FileModifyEvent(thread, post, filesDiff.file1, filesDiff));
-            });
-        };
+        // Handle deleted files.
+        fileArraysDiff.filesWithoutPair1.forEach((file) => {
+            if(!file.isDeleted) {
+                file.isDeleted = true;
+                this.emit(FileDeleteEvent.name, new FileDeleteEvent(thread, post, file));
+            }
+        });
 
-        let handlePostsDiff = (td) => {
-            /** @type {import('./commons/Thread').ThreadsDiff} */
-            let threadsDiff = td;
-            
-            /** @type {import('./commons/Post').PostArraysDiff} */
-            let postArraysDiff = threadsDiff.postsDiff;
+        // Handle new files.
+        fileArraysDiff.filesWithoutPair2.forEach((file) => {
+            post.files.push(file);
+            this.emit(FileCreateEvent.name, new FileCreateEvent(thread, post, file));
+        });
 
-            // Handle deleted posts.
-            postArraysDiff.postsWithoutPair1.forEach((post) => {
-                if(!post.isDeleted) {
-                    post.isDeleted = true;
-                    this.emit(PostDeleteEvent.name, new PostDeleteEvent(threadsDiff.thread1, post));
+        // Handle files differences.
+        /** @type {import('./commons/File').FilesDiff} */
+        let filesDiff;
+        fileArraysDiff.differences.forEach((fd) => {
+            filesDiff = fd;
+            this.emit(FileModifyEvent.name, new FileModifyEvent(thread, post, filesDiff.file1, filesDiff));
+        });
+    };
 
-                    post.files.forEach((file) => {
-                        file.isDeleted = true;
-                        this.emit(FileDeleteEvent.name, new FileDeleteEvent(threadsDiff.thread1, post, file));
-                    });
-                }
-            });
+    /**
+     * Handle ThreadsDiff object, with firing events.
+     * @param {import('./commons/Thread').ThreadsDiff} td
+     */
+    _handlePostsDiff(td) {
+        let threadsDiff = td;
 
-            // Handle new posts.
-            postArraysDiff.postsWithoutPair2.forEach((post) => {
-                threadsDiff.thread1.posts.push(post);
-                this.emit(PostCreateEvent.name, new PostCreateEvent(threadsDiff.thread1, post));
+        /** @type {import('./commons/Post').PostArraysDiff} */
+        let postArraysDiff = threadsDiff.postsDiff;
+
+        // Handle deleted posts.
+        postArraysDiff.postsWithoutPair1.forEach((post) => {
+            if(!post.isDeleted) {
+                post.isDeleted = true;
+                this.emit(PostDeleteEvent.name, new PostDeleteEvent(threadsDiff.thread1, post));
 
                 post.files.forEach((file) => {
-                    this.emit(FileCreateEvent.name, new FileCreateEvent(threadsDiff.thread1, post, file));
+                    file.isDeleted = true;
+                    this.emit(FileDeleteEvent.name, new FileDeleteEvent(threadsDiff.thread1, post, file));
                 });
+            }
+        });
+
+        // Handle new posts.
+        postArraysDiff.postsWithoutPair2.forEach((post) => {
+            threadsDiff.thread1.posts.push(post);
+            this.emit(PostCreateEvent.name, new PostCreateEvent(threadsDiff.thread1, post));
+
+            post.files.forEach((file) => {
+                this.emit(FileCreateEvent.name, new FileCreateEvent(threadsDiff.thread1, post, file));
             });
+        });
 
-            // Handle posts differences.
-            /** @type {import('./commons/Post').PostsDiff} */
-            let postsDiff;
-            postArraysDiff.differences.forEach((pd) => {
-                postsDiff = pd;
+        // Handle posts differences.
+        /** @type {import('./commons/Post').PostsDiff} */
+        let postsDiff;
+        postArraysDiff.differences.forEach((pd) => {
+            postsDiff = pd;
 
-                if(postsDiff.post1.isDeleted) {
-                    // TO-DO Log
-                    console.log('Post has rose from the dead!');
+            if(postsDiff.post1.isDeleted) {
+                // TO-DO Log
+                console.log('Post has rose from the dead!');
+            }
+
+            if(postsDiff.fields.length > 0) {
+                this.emit(PostModifyEvent.name, new PostModifyEvent(threadsDiff.thread1, postsDiff.post1, postsDiff));
+            }
+            if(postsDiff.fields.includes('isBanned')) {
+                postsDiff.post1.isBanned = postsDiff.post2.isBanned;
+            }
+            if(postsDiff.fields.includes('files')) {
+                this._handleFilesDiff(threadsDiff.thread1, postsDiff.post1, postsDiff.filesDiff);
+            }
+        });
+    };
+
+    /**
+     * Update a thread by comparing it with its fresh image board's representation.
+     * If some changes are found, then according events are fired.
+     * @param {Thread} thread Thread to update.
+     * @throws {AxiosError}
+     */
+    async _handleThread(thread) {
+        // Events (ThreadModify, PostCreate, PostDelete, PostModify, FileCreate, FileDelete, FileModify)
+        // are sequential. For example, if a file has a modification, then this sequence of events will
+        // happen: ThreadModify -> PostModify -> FileModify. Or, with some modifications to a post:
+        // ThreadModify -> PostModify.
+        //
+        // If a post being deleted, then its files become deleted too (isDeleted is set to true).
+        // The sequence of events for this case: ThreadModify -> PostDelete -> FileDelete.
+        //
+        // Events (ThreadDelete, ThreadNotFound, ThreadCreate) are single. It means that after firing
+        // one of these events, events like (FileDelete, PostDelete) or (FileCreate, PostCreate) are
+        // not being fired.
+        //
+        // Thread updater ignores viewsCount and lastActivity fields in the thread to thread comparison,
+        // since catalog observer updates them. Also threads from fetchThread function have these properties
+        // are set to 0.
+
+
+        /** @type {Thread} */
+        let fetchedThread;
+        try {
+            fetchedThread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, thread.number);
+        } catch(error) {
+            this._handleFetchErrors(error);
+            return;
+        }
+
+        if(fetchedThread === 404) {
+            thread.isDeleted = true;
+            this.emit(ThreadDeleteEvent.name, new ThreadDeleteEvent(thread));
+            return;
+        }
+
+        /** @type {import('./commons/Thread').ThreadsDiff} */
+        let threadsDiff = Thread.diffThreads(thread, fetchedThread);
+        threadsDiff.fields = threadsDiff.fields.filter(e => e !== 'lastActivity' && e !== 'viewsCount');
+
+        if(threadsDiff.fields.length > 0) {
+            this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(thread, threadsDiff));
+        }
+        if(threadsDiff.fields.includes('postersCount')) {
+            thread.postersCount = fetchedThread.postersCount;
+        }
+        if(threadsDiff.fields.includes('posts')) {
+            this._handlePostsDiff(threadsDiff);
+        }
+    };
+
+    /**
+     * Make a requests to the active image board's catalog. If the catalog shows
+     * changes in stored threads, then differed threads are being checked in detail,
+     * by the _handleThread function. 
+     */
+    async _observeCatalog() {
+        // Since some of the thread fields are only available from its catalog thread's
+        // representation, this function updates these fields and fires ThreadModifyEvent event,
+        // on already stored threads.
+        //
+        // Observer method handles properties viewsCount and lastActivity by itself. If changes
+        // are detected (in a stored thread to its representation on a catalog thread), then the
+        // observer fires ThreadModifyEvent event, and after the event, applies the changes to a thread.
+
+        /** @type {CatalogThread[]} */
+        let catalog;
+        try {
+            catalog = await ThreadsObserverService.fetchCatalog(this.imageBoard, this.board);
+        } catch(error) {
+            this._handleFetchErrors(error);
+            return;
+        }
+
+        if(catalog === 404) {
+            // TO-DO Log 404
+            console.log('Catalog fetch 404');
+            return;
+        }
+
+
+        // Search for new or modified threads.
+        let 
+        /** @type {Thread} */ thread,
+        /** @type {Thread} */ blankThread,
+        /** @type {CatalogThread} */ catalogThread,
+        /** @type {import('./commons/Thread').ThreadsDiff} */ threadsDiff;
+        for(let i = 0; i < catalog.length; i++) {
+            catalogThread = catalog[i];
+
+            if(this.catalogWhitelistEnabled && ! this.catalogWhitelist.includes(catalogThread.number)) {
+                continue;
+            }
+
+            thread = this.getThread(catalogThread.number);
+            if(thread !== null) {
+                if(thread.viewsCount !== catalogThread.viewsCount || thread.lastActivity !== catalogThread.lastActivity) {
+                    blankThread = thread.clone();
+                    blankThread.viewsCount = catalogThread.viewsCount;
+                    blankThread.lastActivity = catalogThread.lastActivity;
+
+                    threadsDiff = Thread.diffThreads(thread, blankThread);
+                    this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(thread, threadsDiff));
+                    thread.viewsCount = catalogThread.viewsCount;
+                    thread.lastActivity = catalogThread.lastActivity;
+
+                    if(threadsDiff.fields.includes('lastActivity')) {
+                        await this._handleThread(thread);
+                        await this._wait(this.threadFetchDelay);
+                    }
                 }
-
-                if(postsDiff.fields.length > 0) {
-                    this.emit(PostModifyEvent.name, new PostModifyEvent(threadsDiff.thread1, postsDiff.post1, postsDiff));
-                }
-                if(postsDiff.fields.includes('isBanned')) {
-                    postsDiff.post1.isBanned = postsDiff.post2.isBanned;
-                }
-                if(postsDiff.fields.includes('files')) {
-                    handleFilesDiff(threadsDiff.thread1, postsDiff.post1, postsDiff.filesDiff);
-                }
-            });
-        };
-
-        let updateThread = async (thread) => {
-            // Events (ThreadModify, PostCreate, PostDelete, PostModify, FileCreate, FileDelete, FileModify)
-            // are sequential. For examle, if a file has a modification, then this sequence of events will
-            // happen: ThreadModify -> PostModify -> FileModify. Or, with some modifications to a post:
-            // ThreadModify -> PostModify.
-            //
-            // If a post being deleted, then its files become deleted too (isDeleted is set to true).
-            // The sequence of events for this case: ThreadModify -> PostDelete -> FileDelete.
-            //
-            // Events (ThreadDelete, ThreadNotFound, ThreadCreate) are single. It means that after firing
-            // one of these events, events like (FileDelete, PostDelete) or (FileCreate, PostCreate) are
-            // not being fired.
-            //
-            // Thread updater ignores viewsCount and lastActivity fields in the thread to thread comparison,
-            // since catalog observer updates them. Also threads from fetchThread function have these properties
-            // are set to 0.
-
-
-            /** @type {Thread} */
-            let fetchedThread;
-            try {
-                fetchedThread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, thread.number);
-            } catch(error) {
-                handleFetchErrors(error);
-                return;
-            }
-
-            if(fetchedThread === 404) {
-                thread.isDeleted = true;
-                this.emit(ThreadDeleteEvent.name, new ThreadDeleteEvent(thread));
-                return;
-            }
-
-            /** @type {import('./commons/Thread').ThreadsDiff} */
-            let threadsDiff = Thread.diffThreads(thread, fetchedThread);
-            threadsDiff.fields = threadsDiff.fields.filter(e => e !== 'lastActivity' && e !== 'viewsCount');
-
-            if(threadsDiff.fields.length > 0) {
-                this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(thread, threadsDiff));
-            }
-            if(threadsDiff.fields.includes('postersCount')) {
-                thread.postersCount = fetchedThread.postersCount;
-            }
-            if(threadsDiff.fields.includes('posts')) {
-                handlePostsDiff(threadsDiff);
-            }
-        };
-
-
-        let observeCatalog = async () => {
-            // Since some of the thread fields are only available from its catalog thread's
-            // representation, this function updates these fields and fires ThreadModifyEvent event,
-            // on already stored threads.
-            //
-            // Observer method handles properties viewsCount and lastActivity by itself. If changes
-            // are detected (in a stored thread to its representation on a catalog thread), then the
-            // observer fires ThreadModifyEvent event, and after the event, applies the changes to a thread.
-
-            /** @type {CatalogThread[]} */
-            let catalog;
-            try {
-                catalog = await ThreadsObserverService.fetchCatalog(this.imageBoard, this.board);
-            } catch(error) {
-                handleFetchErrors(error);
-                return;
-            }
-
-            if(catalog === 404) {
-                // TO-DO Log 404
-                console.log('Catalog fetch 404');
-                return;
-            }
-
-
-            // Search for new or modified threads.
-            let 
-            /** @type {Thread} */ thread,
-            /** @type {Thread} */ blankThread,
-            /** @type {CatalogThread} */ catalogThread,
-            /** @type {import('./commons/Thread').ThreadsDiff} */ threadsDiff;
-            for(let i = 0; i < catalog.length; i++) {
-                catalogThread = catalog[i];
-
-                if(this.catalogWhitelistEnabled && ! this.catalogWhitelist.includes(catalogThread.number)) {
+            } else {
+                try {
+                    thread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, catalogThread.number);
+                    await this._wait(this.threadFetchDelay);
+                } catch(error) {
+                    this._handleFetchErrors(error);
                     continue;
                 }
 
-                thread = this.getThread(catalogThread.number);
-                if(thread !== null) {
-                    if(thread.viewsCount !== catalogThread.viewsCount || thread.lastActivity !== catalogThread.lastActivity) {
-                        blankThread = thread.clone();
-                        blankThread.viewsCount = catalogThread.viewsCount;
-                        blankThread.lastActivity = catalogThread.lastActivity;
+                if(thread === 404) {
+                    this.emit(ThreadNotFoundEvent.name, new ThreadNotFoundEvent(catalogThread));
+                    continue;
+                }
 
-                        threadsDiff = Thread.diffThreads(thread, blankThread);
-                        this.emit(ThreadModifyEvent.name, new ThreadModifyEvent(thread, threadsDiff));
-                        thread.viewsCount = catalogThread.viewsCount;
-                        thread.lastActivity = catalogThread.lastActivity;
+                thread.lastActivity = catalogThread.lastActivity;
+                thread.viewsCount = catalogThread.viewsCount;
+                this.threads.push(thread);
+                this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(thread));
+            }
+        }
 
-                        if(threadsDiff.fields.includes('lastActivity')) {
-                            await updateThread(thread);
-                            await wait(this.threadFetchDelay);
-                        }
-                    }
-                } else {
-                    try {
-                        thread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, catalogThread.number);
-                        await wait(this.threadFetchDelay);
-                    } catch(error) {
-                        handleFetchErrors(error);
-                        continue;
-                    }
+        // Searching for probably deleted threads.
+        for(let i = 0; i < this.threads.length; i++) {
+            thread = this.threads[i];
 
-                    if(thread === 404) {
-                        this.emit(ThreadNotFoundEvent.name, new ThreadNotFoundEvent(catalogThread));
-                        continue;
-                    }
-
-                    thread.lastActivity = catalogThread.lastActivity;
-                    thread.viewsCount = catalogThread.viewsCount;
-                    this.threads.push(thread);
-                    this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(thread));
+            for(let j = 0; j < catalog.length; j++) {
+                catalogThread = catalog[j];
+                if(thread.number === catalogThread.number) {
+                    break;
+                } else if(catalog.length - 1 === j) {
+                    // Thread not found in the fetched catalog.
+                    await this._handleThread(thread);
+                    await this._wait(this.threadFetchDelay);
                 }
             }
+        }
+    };
 
-            // Searching for probably deleted threads.
-            for(let i = 0; i < this.threads.length; i++) {
-                thread = this.threads[i];
 
-                for(let j = 0; j < catalog.length; j++) {
-                    catalogThread = catalog[j];
-                    if(thread.number === catalogThread.number) {
-                        break;
-                    } else if(catalog.length - 1 === j) {
-                        // Thread not found in the fetched catalog.
-                        await updateThread(thread);
-                        await wait(this.threadFetchDelay);
-                    }
-                }
-            }
-        };
+    /**
+     * Start catalog observer timers.
+     */
+    async startCatalogObserver() {
+        this.database = process.database;
 
+        try {
+            await this._getStoredThreads();
+        } catch(error) {
+            this._handleDatabaseErrors(error);
+        }
 
         // Starter.
         let recursiveTimer = async () => {
-            this.catalogObserverRunning && await observeCatalog();
-            this.catalogObserverRunning && await wait(this.catalogObserverDelay);
+            this.catalogObserverRunning && await this._observeCatalog();
+            this.catalogObserverRunning && await this._wait(this.catalogObserverDelay);
             this.catalogObserverRunning && recursiveTimer();
         };
 
@@ -430,11 +585,10 @@ class ThreadsObserverService extends EventEmitter {
         setTimeout(recursiveTimer, this.catalogObserverDelay);
     };
 
-
     /**
      * Stop catalog observer timers.
      */
-    stopCatalogObserver() {
+    async stopCatalogObserver() {
         this.catalogObserverRunning = false;
     };
 };
