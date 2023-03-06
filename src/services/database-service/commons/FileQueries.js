@@ -58,7 +58,7 @@ class FileQueries {
             `SELECT * FROM files WHERE id = ${id};`;
         } else {
             sql = 
-            `SELECT id, post_id, index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
+            `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
                 FROM files WHERE id = ${id};`;
         }
 
@@ -79,7 +79,7 @@ class FileQueries {
             `SELECT * FROM files WHERE post_id = ${postId} AND list_index = 1;`;
         } else {
             sql = 
-            `SELECT id, post_id, index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
+            `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
                 FROM files WHERE post_id = ${postId} AND list_index = 1;`;
         }
         
@@ -105,7 +105,7 @@ class FileQueries {
             `SELECT * FROM files WHERE post_id = ${postId};`;
         } else {
             sql =
-            `SELECT id, post_id, index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
+            `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
                 FROM files WHERE post_id = ${postId};`;
         }
         
@@ -139,7 +139,7 @@ class FileQueries {
             `SELECT * FROM files WHERE id IN ${ids};`;
         } else {
             sql = 
-            `SELECT id, post_id, index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
+            `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
                 FROM files WHERE id IN ${ids};`;
         }
 
@@ -194,7 +194,7 @@ class FileQueries {
             params.push(file[field]);
         });
 
-        await DBUtils.wrapExecQuery(sql, params, this.database);
+        await DBUtils.wrapRunQuery(sql, params, this.database);
     };
 };
 

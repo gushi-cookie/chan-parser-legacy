@@ -53,7 +53,7 @@ class PostQueries {
      * @throws {SQLiteError}
      */
     async selectFirstPostOfThread(threadId) {
-        let sql = `SELECT * FROM posts WHERE thread_id = ${threadId} AND index = 1;`;
+        let sql = `SELECT * FROM posts WHERE thread_id = ${threadId} AND list_index = 1;`;
         let row = await DBUtils.wrapGetQuery(sql, [], this.database);
 
         if(row !== null) {
@@ -122,7 +122,7 @@ class PostQueries {
             params.push(post[field]);
         });
 
-        await DBUtils.wrapExecQuery(sql, params, this.database);
+        await DBUtils.wrapRunQuery(sql, params, this.database);
     };
 };
 

@@ -165,7 +165,7 @@ class ThreadQueries {
             params.push(thread[field]);
         });
 
-        await DBUtils.wrapExecQuery(sql, params, this.database);
+        await DBUtils.wrapRunQuery(sql, params, this.database);
     };
 };
 
