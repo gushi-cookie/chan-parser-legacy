@@ -120,7 +120,7 @@ class Thread {
             postsDiff: null,
         };
 
-        Object.getOwnPropertyNames(thread1).forEach((name) => {
+        Object.getOwnPropertyNames(thread1).filter(e => e !== 'id').forEach((name) => {
             if(name !== 'posts' && thread1[name] !== thread2[name]) {
                 result.fields.push(name);
             }
@@ -196,6 +196,7 @@ class Thread {
         });
 
         let op = object.posts[0];
+        if(!op.sub) op.sub = '';
         return new Thread(op.no, op.sub, board, op.unique_ips, posts, op.time, 0, 0, '4chan');
     };
 };

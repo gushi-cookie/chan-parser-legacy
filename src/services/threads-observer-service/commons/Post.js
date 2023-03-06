@@ -128,7 +128,7 @@ class Post {
             filesDiff: null,
         };
 
-        Object.getOwnPropertyNames(post1).forEach((name) => {
+        Object.getOwnPropertyNames(post1).filter(e => e !== 'id').forEach((name) => {
             if(name !== 'files' && post1[name] !== post2[name]) {
                 result.fields.push(name);
             }
