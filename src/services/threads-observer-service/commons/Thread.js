@@ -161,6 +161,16 @@ class Thread {
     
 
     /**
+     * Throw parse error.
+     * @param {string} name 
+     * @param {any} value 
+     */
+    static _parseError(name, value) {
+        throw new Error(`Thread parse error! Field: ${name} is required but ${value} passed.`);
+    };
+
+
+    /**
      * Parse a thread from a raw object.
      * 
      * Note: fields viewsCount and lastActivity are set to 0.
@@ -169,6 +179,11 @@ class Thread {
      * @returns {Thread} New Thread instance.
      */
     static parseFrom2chJson(object) {
+        ['current_thread', 'title', 'unique_posters'].forEach((field) => {
+            if(object[field] === null || object[field] === undefined)
+                Thread._parseError(field, object[field]);
+        });
+
         let posts = [];
         if(object.threads[0].posts !== null) {
             object.threads[0].posts.forEach((item, index) => {
@@ -176,7 +191,14 @@ class Thread {
             });
         }
 
-        return new Thread(object.current_thread, object.title, object.board.id, object.unique_posters, posts, posts[0].createTimestamp, 0, 0, '2ch');
+        return new Thread(
+            Number(object.current_thread), 
+            String(object.title), 
+            String(object.board.id), 
+            Number(object.unique_posters), 
+            posts, 
+            Number(posts[0].createTimestamp), 
+            0, 0, '2ch');
     };
 
 
@@ -197,7 +219,19 @@ class Thread {
 
         let op = object.posts[0];
         if(!op.sub) op.sub = '';
-        return new Thread(op.no, op.sub, board, op.unique_ips, posts, op.time, 0, 0, '4chan');
+
+        ['no', 'unique_ips', 'time'].forEach((field) => {
+            if(op[field] === null || op[field] === undefined) Thread._parseError(field, op[field]);
+        });
+
+        return new Thread(
+            Number(op.no),  
+            String(op.sub), 
+            board, 
+            Number(op.unique_ips), 
+            posts, 
+            Number(op.time), 
+            0, 0, '4chan');
     };
 };
 

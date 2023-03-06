@@ -201,11 +201,31 @@ class File {
 
 
     /**
+     * Throw parse error.
+     * @param {string} name 
+     * @param {any} value 
+     */
+    static _parseError(name, value) {
+        throw new Error(`File parse error! Field: ${name} is required but ${value} passed.`);
+    };
+    
+
+    /**
      * @param {any} object Parsed data object from 2ch API.
      * @param {number} listIndex The file's index in files list.
      * @returns {File} New File instance
      */
     static parseFrom2chJson(object, listIndex) {
+        ['fullname', 'name', 'path', 'thumbnail', 'md5'].forEach((field) => {
+            if(object[field] === null || object[field] === undefined)
+                File._parseError(field, object[field]);
+        });
+
+        object['fullname'] = String(object['fullname']);
+        object['name'] = String(object['name']);
+        object['path'] = String(object['path']);
+        object['thumbnail'] = String(object['thumbnail']);
+
         let index = object.fullname.lastIndexOf('.');
         if(index >= 0) object.fullname = object.fullname.slice(0, index);
 
@@ -213,13 +233,14 @@ class File {
         if(index >= 0) object.name = object.name.slice(0, index);
 
         
-        return new File(listIndex,
-                        `https://2ch.hk${object.path}`,
-                        `https://2ch.hk${object.thumbnail}`, 
-                        object.fullname,
-                        object.name,
-                        object.md5,
-                        false);
+        return new File(
+            listIndex,
+            `https://2ch.hk${object.path}`,
+            `https://2ch.hk${object.thumbnail}`, 
+            object.fullname,
+            object.name,
+            String(object.md5),
+            false);
     };
 
 
@@ -230,10 +251,21 @@ class File {
      * @returns {File} New File instance
      */
     static parseFrom4canJson(board, object, listIndex) {
-        return new File(listIndex,
-                        `https://i.4cdn.org/${board}/${object.tim}${object.ext}`,
-                        `https://i.4cdn.org/${board}/${object.tim}s.jpg`,
-                        object.filename, object.tim, object.md5, false);
+        ['tim', 'ext', 'filename', 'md5'].forEach((field) => {
+            if(object[field] === null || object[field] === undefined)
+                File._parseError(field, object[field]);
+        });
+
+        object['tim'] = String(object['tim']);
+        object['ext'] = String(object['ext']);
+
+        return new File(
+            listIndex,
+            `https://i.4cdn.org/${board}/${object.tim}${object.ext}`,
+            `https://i.4cdn.org/${board}/${object.tim}s.jpg`,
+            String(object.filename), 
+            object.tim, 
+            String(object.md5), false);
     };
 };
 

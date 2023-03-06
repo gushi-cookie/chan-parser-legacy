@@ -214,11 +214,26 @@ class Post {
 
 
     /**
+     * Throw parse error.
+     * @param {string} name 
+     * @param {any} value 
+     */
+    static _parseError(name, value) {
+        throw new Error(`Post parse error! Field: ${name} is required but ${value} passed.`);
+    };
+
+
+    /**
      * @param {*} object Parsed data object from 2ch API.
      * @param {number} listIndex The post's index in posts list.
      * @returns {Post} New Post instance.
      */
     static parseFrom2chJson(object, listIndex) {
+        ['num', 'timestamp', 'name', 'comment', 'banned', 'op'].forEach((field) => {
+            if(object[field] === null || object[field] === undefined)
+                Post._parseError(field, object[field]);
+        });
+
         let files = [];
         if(object.files !== null) {
             object.files.forEach((item, index) => {
@@ -226,10 +241,16 @@ class Post {
             });
         }
         
-        return new Post(listIndex, object.num, object.timestamp, object.name, object.comment, files, 
-                        object.banned ? true : false,
-                        false,
-                        object.op ? true : false);
+        return new Post(
+            listIndex, 
+            Number(object.num), 
+            Number(object.timestamp), 
+            String(object.name), 
+            String(object.comment), 
+            files,      
+            Boolean(object.banned),
+            false,
+            Boolean(object.op));
     };
 
 
@@ -240,12 +261,24 @@ class Post {
      * @returns {Post} New Post instance.
      */
     static parseFrom4chanJson(board, object, listIndex) {
+        ['no', 'time', 'name'].forEach((field) => {
+            if(object[field] === null || object[field] === undefined)
+                Post._parseError(field, object[field]);
+        });
+
         let files = [];
         if(object.filename !== undefined) {
             files.push(File.parseFrom4canJson(board, object, 0));
         }
 
-        return new Post(listIndex, object.no, object.time, object.name, object.com === undefined ? '' : object.com, files, false, false, object.sub !== undefined);
+        return new Post(
+            listIndex, 
+            Number(object.no), 
+            Number(object.time), 
+            String(object.name), 
+            object.com ? String(object.com) : '', 
+            files, false, false, 
+            object.sub !== undefined);
     };
 };
 
