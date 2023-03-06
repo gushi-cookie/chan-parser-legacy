@@ -27,7 +27,7 @@ class PostQueries {
     async createTable() {
         let sql = 
         `CREATE TABLE IF NOT EXISTS posts (
-            id               PRIMARY KEY AUTOINCREMENT,
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
             thread_id        INTEGER NOT NULL,
             number           INTEGER NOT NULL,
             list_index       INTEGER NOT NULL,

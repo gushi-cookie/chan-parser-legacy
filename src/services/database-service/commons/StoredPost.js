@@ -61,7 +61,7 @@ class StoredPost {
      * @param {Post} post
      * @returns {StoredPost}
      */
-    static makeFromObserverFile(post) {
+    static makeFromObserverPost(post) {
         return new StoredPost(post.id, post.threadId, post.number, post.listIndex, post.createTimestamp, post.name, post.comment, post.isBanned, post.isDeleted, post.isOp);
     };
 

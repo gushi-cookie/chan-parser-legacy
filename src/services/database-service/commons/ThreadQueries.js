@@ -29,7 +29,7 @@ class ThreadQueries {
     async createTable() {
         let sql = 
         `CREATE TABLE IF NOT EXISTS threads (
-            id               PRIMARY KEY AUTOINCREMENT,
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
             board            TEXT NOT NULL,
             image_board      TEXT NOT NULL,
             number           INTEGER NOT NULL,
@@ -37,7 +37,8 @@ class ThreadQueries {
             posters_count    INTEGER NOT NULL,
             create_timestamp INTEGER NOT NULL,
             views_count      INTEGER NOT NULL,
-            last_activity    INTEGER NOT NULL
+            last_activity    INTEGER NOT NULL,
+            is_deleted       INTEGER NOT NULL
         );`;
 
         await DBUtils.wrapExecQuery(sql, this.database);
@@ -69,23 +70,22 @@ class ThreadQueries {
     /**
      * Select all threads by a board conditions.
      * 
-     * Note: imageBoard and board may be omitted (null) 
-     * or only imageBoard passed or both imageBoard and 
-     * board passed.
+     * Note: imageBoard and board may be omitted (null).
      * @param {string} imageBoard 
      * @param {string} board 
+     * @param {string} includeDeleted Should deleted threads be in the result.
      * @returns {Promise.<StoredThread[]>}
      * @throws {SQLiteError}
      */
-    async selectThreads(imageBoard, board) {
-        let sql;
-        if(imageBoard !== null && board !== null) {
-            sql = `SELECT * FROM threads WHERE image_board = '${imageBoard}' AND board = '${board}';`;
-        } else if(imageBoard !== null) {
-            sql = `SELECT * FROM threads WHERE image_board = '${imageBoard}';`;
-        } else {
-            sql = `SELECT * FROM threads;`;
-        }
+    async selectThreads(imageBoard, board, includeDeleted) {
+        let sql =
+        `SELECT * FROM threads
+            ${(imageBoard || board || !includeDeleted) ? ' WHERE' : ''}
+            ${imageBoard ? ' AND image_board = \'' + imageBoard + '\'' : ''}
+            ${board ? ' AND board = \'' + board + '\'' : ''}
+            ${!includeDeleted ? ' AND is_deleted = 0' : ''}
+        ;`;
+        sql = sql.replace('AND', '');
 
         let rows = await DBUtils.wrapAllQuery(sql, [], this.database);
 
@@ -135,10 +135,10 @@ class ThreadQueries {
      */
     async insertThread(thread) {
         let sql =
-        `INSERT INTO threads(id, board, image_board, number, title, posters_count, create_timestamp, views_count, last_activity)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        `INSERT INTO threads(id, board, image_board, number, title, posters_count, create_timestamp, views_count, last_activity, is_deleted)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-        let result = await DBUtils.wrapRunQuery(sql, [thread.id, thread.board, thread.imageBoard, thread.number, thread.title, thread.postersCount, thread.createTimestamp, thread.viewsCount, thread.lastActivity], this.database);
+        let result = await DBUtils.wrapRunQuery(sql, [thread.id, thread.board, thread.imageBoard, thread.number, thread.title, thread.postersCount, thread.createTimestamp, thread.viewsCount, thread.lastActivity, thread.isDeleted], this.database);
         return result.lastID;
     };
 
