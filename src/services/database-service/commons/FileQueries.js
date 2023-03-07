@@ -76,11 +76,11 @@ class FileQueries {
         let sql;
         if(includeData) {
             sql = 
-            `SELECT * FROM files WHERE post_id = ${postId} AND list_index = 1;`;
+            `SELECT * FROM files WHERE post_id = ${postId} AND list_index = 0;`;
         } else {
             sql = 
             `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
-                FROM files WHERE post_id = ${postId} AND list_index = 1;`;
+                FROM files WHERE post_id = ${postId} AND list_index = 0;`;
         }
         
         let row = await DBUtils.wrapGetQuery(sql, [], this.database);

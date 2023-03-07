@@ -53,7 +53,7 @@ class PostQueries {
      * @throws {SQLiteError}
      */
     async selectFirstPostOfThread(threadId) {
-        let sql = `SELECT * FROM posts WHERE thread_id = ${threadId} AND list_index = 1;`;
+        let sql = `SELECT * FROM posts WHERE thread_id = ${threadId} AND list_index = 0;`;
         let row = await DBUtils.wrapGetQuery(sql, [], this.database);
 
         if(row !== null) {
