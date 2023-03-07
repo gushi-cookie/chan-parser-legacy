@@ -119,7 +119,7 @@ class File {
 
         let fields = [];
 
-        Object.getOwnPropertyNames(file1).filter(e => e !== 'id').forEach((name) => {
+        Object.getOwnPropertyNames(file1).filter(e => e !== 'id' && e !== 'postId').forEach((name) => {
             if(file1[name] !== file2[name]) {
                 fields.push(name);
             }

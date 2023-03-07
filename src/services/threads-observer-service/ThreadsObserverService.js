@@ -208,15 +208,17 @@ class ThreadsObserverService extends EventEmitter {
             tree.posts.forEach((storedPost) => {
                 if(files.has(storedPost.id)) {
                     posts.push(storedPost.toObserverPost(files.get(storedPost.id)));
+                } else {
+                    posts.push(storedPost.toObserverPost([]));
                 }
             });
 
             return tree.thread.toObserverThread(posts);
         };
+
         let headers = await this.database.threadQueries.selectThreads(this.imageBoard, this.board, false);
 
         let tree;
-        let thread;
         for(let i = 0; i < headers.length; i++) {
             tree = await this.database.threadQueries.selectThreadTree(this.imageBoard, this.board, headers[i].id);
             this.threads.push(unwrapTree(tree));
@@ -239,11 +241,11 @@ class ThreadsObserverService extends EventEmitter {
         let sFile;
         for(let i = 0; i < thread.posts.length; i++) {
             post = thread.posts[i];
-            sPost = StoredPost.makeFromObserverPost(post);
+            sPost = StoredPost.makeFromObserverPost(post, thread.id);
             post.id = await this.database.postQueries.insertPost(sPost, thread.id);
 
             for(let j = 0; j < post.files.length; j++) {
-                sFile = StoredFile.makeFromObserverFile(post.files[j]);
+                sFile = StoredFile.makeFromObserverFile(post.files[j], post.id);
                 post.files[j].id = await this.database.fileQueries.insertFile(sFile, post.id);
             }
         }
@@ -251,41 +253,90 @@ class ThreadsObserverService extends EventEmitter {
 
 
     /**
+     * Insert a new post in the database.
+     * @param {Post} post 
+     * @param {number} threadId 
+     * @returns {Promise.<boolean>}
+     */
+    async _insertPost(post, threadId) {
+        try {
+            post.id = await this.database.postQueries.insertPost(StoredPost.makeFromObserverPost(post, threadId), threadId);
+        } catch(error) {
+            this._handleDatabaseErrors(error);
+            return false;
+        }
+        return true;
+    };
+
+
+    /**
+     * Insert a new file in the database.
+     * @param {File} file 
+     * @param {number} postId 
+     * @returns {Promise.<boolean>}
+     */
+    async _insertFile(file, postId) {
+        try {
+            file.id = await this.database.fileQueries.insertFile(StoredFile.makeFromObserverFile(file, postId), postId);
+        } catch(error) {
+            this._handleDatabaseErrors(error);
+            return false;
+        }
+        return true;
+    };
+
+
+    /**
      * Update a thread's specific fields in the database.
-     * 
      * @param {Thread} thread 
      * @param {String[]} fields 
-     * @throws {SQLiteError}
+     * @returns {Promise.<boolean>}
      */
     async _updateThread(thread, fields) {
         let sThread = StoredThread.makeFromObserverThread(thread);
-        await this.database.threadQueries.updateThread(sThread, fields);
+        try {
+            await this.database.threadQueries.updateThread(sThread, fields);
+        } catch(error) {
+            this._handleDatabaseErrors(error);
+            return false;
+        }
+        return true;
     };
 
 
     /**
      * Update a post's specific fields in the database.
-     * 
      * @param {Post} post 
      * @param {String[]} fields 
-     * @throws {SQLiteError}
+     * @returns {Promise.<boolean>}
      */
     async _updatePost(post, fields) {
-        let sPost = StoredPost.makeFromObserverPost(post);
-        await this.database.postQueries.updatePost(sPost, fields);
+        let sPost = StoredPost.makeFromObserverPost(post, null);
+        try {
+            await this.database.postQueries.updatePost(sPost, fields);
+        } catch(error) {
+            this._handleDatabaseErrors(error);
+            return false;
+        }
+        return true;
     };
 
 
     /**
      * Update a file's specific fields in the database.
-     * 
      * @param {File} file 
      * @param {String[]} fields 
-     * @throws {SQLiteError}
+     * @returns {Promise.<boolean>}
      */
     async _updateFile(file, fields) {
-        let sFile = StoredFile.makeFromObserverFile(file);
-        await this.database.fileQueries.updateFile(sFile, fields);
+        let sFile = StoredFile.makeFromObserverFile(file, null);
+        try {
+            await this.database.fileQueries.updateFile(sFile, fields);
+        } catch(error) {
+            this._handleDatabaseErrors(error);
+            return false;
+        }
+        return true;
     };
 
 
@@ -327,70 +378,88 @@ class ThreadsObserverService extends EventEmitter {
      * @param {Post} post 
      * @param {import('./commons/File').FileArraysDiff} fad 
      */
-    _handleFilesDiff(thread, post, fad) {
+    async _handleFilesDiff(thread, post, fad) {
         let fileArraysDiff = fad;
 
         // Handle deleted files.
-        fileArraysDiff.filesWithoutPair1.forEach((file) => {
+        let file;
+        for(let i = 0; i < fileArraysDiff.filesWithoutPair1.length; i++) {
+            file = fileArraysDiff.filesWithoutPair1[i];
             if(!file.isDeleted) {
                 file.isDeleted = true;
                 this.emit(FileDeleteEvent.name, new FileDeleteEvent(thread, post, file));
+                await this._updateFile(file, ['isDeleted']);
             }
-        });
+        };
 
         // Handle new files.
-        fileArraysDiff.filesWithoutPair2.forEach((file) => {
+        for(let i = 0; i < fileArraysDiff.filesWithoutPair2.length; i++) {
+            file = fileArraysDiff.filesWithoutPair2[i];
             post.files.push(file);
             this.emit(FileCreateEvent.name, new FileCreateEvent(thread, post, file));
-        });
+            await this._insertFile(file, post.id);
+        };
 
         // Handle files differences.
         /** @type {import('./commons/File').FilesDiff} */
         let filesDiff;
-        fileArraysDiff.differences.forEach((fd) => {
-            filesDiff = fd;
+        for(let i = 0; i < fileArraysDiff.differences.length; i++) {
+            filesDiff = fileArraysDiff.differences[i];
             this.emit(FileModifyEvent.name, new FileModifyEvent(thread, post, filesDiff.file1, filesDiff));
-        });
+            await this._updateFile(filesDiff.file1, [filesDiff.fields]);
+        };
     };
 
     /**
      * Handle ThreadsDiff object, with firing events.
      * @param {import('./commons/Thread').ThreadsDiff} td
      */
-    _handlePostsDiff(td) {
+    async _handlePostsDiff(td) {
         let threadsDiff = td;
 
         /** @type {import('./commons/Post').PostArraysDiff} */
         let postArraysDiff = threadsDiff.postsDiff;
 
         // Handle deleted posts.
-        postArraysDiff.postsWithoutPair1.forEach((post) => {
+        let post;
+        let file;
+        for(let i = 0; i < postArraysDiff.postsWithoutPair1.length; i++) {
+            post = postArraysDiff.postsWithoutPair1[i];
+
             if(!post.isDeleted) {
                 post.isDeleted = true;
                 this.emit(PostDeleteEvent.name, new PostDeleteEvent(threadsDiff.thread1, post));
+                await this._updatePost(post, ['isDeleted']);
 
-                post.files.forEach((file) => {
+                for(let j = 0; j < post.files.length; j++) {
+                    file = post.files[j];
                     file.isDeleted = true;
                     this.emit(FileDeleteEvent.name, new FileDeleteEvent(threadsDiff.thread1, post, file));
-                });
+                    await this._updateFile(file, ['isDeleted']);
+                };
             }
-        });
+        };
 
         // Handle new posts.
-        postArraysDiff.postsWithoutPair2.forEach((post) => {
+        for(let i = 0; i < postArraysDiff.postsWithoutPair2.length; i++) {
+            post = postArraysDiff.postsWithoutPair2[i];
+
             threadsDiff.thread1.posts.push(post);
             this.emit(PostCreateEvent.name, new PostCreateEvent(threadsDiff.thread1, post));
+            await this._insertPost(post, threadsDiff.thread1.id);
 
-            post.files.forEach((file) => {
+            for(let j = 0; j < post.files.length; j++) {
+                file = post.files[j];
                 this.emit(FileCreateEvent.name, new FileCreateEvent(threadsDiff.thread1, post, file));
-            });
-        });
+                await this._insertFile(file, post.id);
+            };
+        };
 
         // Handle posts differences.
         /** @type {import('./commons/Post').PostsDiff} */
         let postsDiff;
-        postArraysDiff.differences.forEach((pd) => {
-            postsDiff = pd;
+        for(let i = 0; i < postArraysDiff.differences.length; i++) {
+            postsDiff = postArraysDiff.differences[i];
 
             if(postsDiff.post1.isDeleted) {
                 // TO-DO Log
@@ -402,18 +471,18 @@ class ThreadsObserverService extends EventEmitter {
             }
             if(postsDiff.fields.includes('isBanned')) {
                 postsDiff.post1.isBanned = postsDiff.post2.isBanned;
+                await this._updatePost(postsDiff.post1, ['isBanned']);
             }
             if(postsDiff.fields.includes('files')) {
-                this._handleFilesDiff(threadsDiff.thread1, postsDiff.post1, postsDiff.filesDiff);
+                await this._handleFilesDiff(threadsDiff.thread1, postsDiff.post1, postsDiff.filesDiff);
             }
-        });
+        };
     };
 
     /**
      * Update a thread by comparing it with its fresh image board's representation.
      * If some changes are found, then according events are fired.
      * @param {Thread} thread Thread to update.
-     * @throws {AxiosError}
      */
     async _handleThread(thread) {
         // Events (ThreadModify, PostCreate, PostDelete, PostModify, FileCreate, FileDelete, FileModify)
@@ -445,6 +514,7 @@ class ThreadsObserverService extends EventEmitter {
         if(fetchedThread === 404) {
             thread.isDeleted = true;
             this.emit(ThreadDeleteEvent.name, new ThreadDeleteEvent(thread));
+            await this._updateThread(thread, ['isDeleted']);
             return;
         }
 
@@ -457,9 +527,10 @@ class ThreadsObserverService extends EventEmitter {
         }
         if(threadsDiff.fields.includes('postersCount')) {
             thread.postersCount = fetchedThread.postersCount;
+            await this._updateThread(thread, ['postersCount']);
         }
         if(threadsDiff.fields.includes('posts')) {
-            this._handlePostsDiff(threadsDiff);
+            await this._handlePostsDiff(threadsDiff);
         }
     };
 
@@ -518,6 +589,8 @@ class ThreadsObserverService extends EventEmitter {
                     thread.viewsCount = catalogThread.viewsCount;
                     thread.lastActivity = catalogThread.lastActivity;
 
+                    await this._updateThread(thread, threadsDiff.fields);
+
                     if(threadsDiff.fields.includes('lastActivity')) {
                         await this._handleThread(thread);
                         await this._wait(this.threadFetchDelay);
@@ -541,6 +614,13 @@ class ThreadsObserverService extends EventEmitter {
                 thread.viewsCount = catalogThread.viewsCount;
                 this.threads.push(thread);
                 this.emit(ThreadCreateEvent.name, new ThreadCreateEvent(thread));
+
+                try {
+                    await this._insertThreadTree(thread);
+                } catch(error) {
+                    this._handleDatabaseErrors(error);
+                    continue;
+                }
             }
         }
 

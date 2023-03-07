@@ -120,8 +120,8 @@ class Thread {
             postsDiff: null,
         };
 
-        Object.getOwnPropertyNames(thread1).filter(e => e !== 'id').forEach((name) => {
-            if(name !== 'posts' && thread1[name] !== thread2[name]) {
+        Object.getOwnPropertyNames(thread1).filter(e => e !== 'id' && e !== 'posts').forEach((name) => {
+            if(thread1[name] !== thread2[name]) {
                 result.fields.push(name);
             }
         });
