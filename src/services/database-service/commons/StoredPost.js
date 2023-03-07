@@ -61,8 +61,8 @@ class StoredPost {
      * @param {Post} post
      * @returns {StoredPost}
      */
-    static makeFromObserverPost(post) {
-        return new StoredPost(post.id, post.threadId, post.number, post.listIndex, post.createTimestamp, post.name, post.comment, post.isBanned, post.isDeleted, post.isOp);
+    static makeFromObserverPost(post, threadId) {
+        return new StoredPost(post.id, threadId, post.number, post.listIndex, post.createTimestamp, post.name, post.comment, post.isBanned, post.isDeleted, post.isOp);
     };
 
 
@@ -72,7 +72,9 @@ class StoredPost {
      * @returns {Post}
      */
     toObserverPost(files) {
-        return new Post(this.listIndex, this.number, this.createTimestamp, this.name, this.comment, files, this.isBanned, this.isDeleted, this.isOp);
+        let post = new Post(this.listIndex, this.number, this.createTimestamp, this.name, this.comment, files, this.isBanned, this.isDeleted, this.isOp);
+        post.id = this.id;
+        return post;
     };
 };
 

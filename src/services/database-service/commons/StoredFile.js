@@ -71,8 +71,8 @@ class StoredFile {
      * @param {File} file
      * @returns {StoredFile}
      */
-    static makeFromObserverFile(file) {
-        return new StoredFile(file.id, file.postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, null, null);
+    static makeFromObserverFile(file, postId) {
+        return new StoredFile(file.id, postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, null, null);
     };
 
     /**
@@ -81,8 +81,8 @@ class StoredFile {
      * @param {StashFile} stashFile 
      * @returns {StoredFile}
      */
-    static makeFromStashFile(observerFile, stashFile) {
-        let file = StoredFile.makeFromObserverFile(observerFile);
+    static makeFromStashFile(observerFile, stashFile, postId) {
+        let file = StoredFile.makeFromObserverFile(observerFile, postId);
         file.extension = stashFile.fileExtension;
         file.data = stashFile.buffer;
         return file;

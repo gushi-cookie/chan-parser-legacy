@@ -72,7 +72,9 @@ class StoredThread {
      * @returns {Thread}
      */
     toObserverThread(posts) {
-        return new Thread(this.number, this.title, this.board, this.postersCount, posts, this.createTimestamp, this.viewsCount, this.lastActivity, this.imageBoard);
+        let thread = new Thread(this.number, this.title, this.board, this.postersCount, posts, this.createTimestamp, this.viewsCount, this.lastActivity, this.imageBoard);
+        thread.id = this.id;
+        return thread;
     }
 };
 
