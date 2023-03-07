@@ -242,11 +242,11 @@ class ThreadsObserverService extends EventEmitter {
         for(let i = 0; i < thread.posts.length; i++) {
             post = thread.posts[i];
             sPost = StoredPost.makeFromObserverPost(post, thread.id);
-            post.id = await this.database.postQueries.insertPost(sPost, thread.id);
+            post.id = await this.database.postQueries.insertPost(sPost);
 
             for(let j = 0; j < post.files.length; j++) {
                 sFile = StoredFile.makeFromObserverFile(post.files[j], post.id);
-                post.files[j].id = await this.database.fileQueries.insertFile(sFile, post.id);
+                post.files[j].id = await this.database.fileQueries.insertFile(sFile);
             }
         }
     };
@@ -260,7 +260,7 @@ class ThreadsObserverService extends EventEmitter {
      */
     async _insertPost(post, threadId) {
         try {
-            post.id = await this.database.postQueries.insertPost(StoredPost.makeFromObserverPost(post, threadId), threadId);
+            post.id = await this.database.postQueries.insertPost(StoredPost.makeFromObserverPost(post, threadId));
         } catch(error) {
             this._handleDatabaseErrors(error);
             return false;
@@ -277,7 +277,7 @@ class ThreadsObserverService extends EventEmitter {
      */
     async _insertFile(file, postId) {
         try {
-            file.id = await this.database.fileQueries.insertFile(StoredFile.makeFromObserverFile(file, postId), postId);
+            file.id = await this.database.fileQueries.insertFile(StoredFile.makeFromObserverFile(file, postId));
         } catch(error) {
             this._handleDatabaseErrors(error);
             return false;

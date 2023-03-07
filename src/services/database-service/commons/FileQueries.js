@@ -158,16 +158,15 @@ class FileQueries {
      * 
      * Note: id property of the file may be null.
      * @param {StoredFile} file File to be inserted.
-     * @param {number} postId Id of a post associated with this file.
      * @returns {Promise.<number>} Id of the inserted file.
      * @throws {SQLiteError}
      */
-    async insertFile(file, postId) {
+    async insertFile(file) {
         let sql = 
         `INSERT INTO files(id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension, data)
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
         
-        let result = await DBUtils.wrapRunQuery(sql, [file.id, postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, file.extension, file.data], this.database);
+        let result = await DBUtils.wrapRunQuery(sql, [file.id, file.postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, file.extension, file.data], this.database);
         return result.lastID;
     };
 
@@ -175,7 +174,7 @@ class FileQueries {
     /**
      * Update columns of a stored file in the files table.
      * 
-     * Note: id property shouldn't be null.
+     * Note: id property shouldn't be null. postId may be null.
      * @param {StoredFile} file File to be updated.
      * @param {String[]} fields Names of the StoredFile class's fields to update.
      * @throws {SQLiteError}
