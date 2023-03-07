@@ -136,11 +136,11 @@ class FileQueries {
         let sql;
         if(includeData) {
             sql = 
-            `SELECT * FROM files WHERE id IN ${ids};`;
+            `SELECT * FROM files WHERE post_id IN ${ids};`;
         } else {
             sql = 
             `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
-                FROM files WHERE id IN ${ids};`;
+                FROM files WHERE post_id IN ${ids};`;
         }
 
         let rows = await DBUtils.wrapAllQuery(sql, [], this.database);
