@@ -295,6 +295,7 @@ class ThreadsObserverService extends EventEmitter {
     async _updateThread(thread, fields) {
         let sThread = StoredThread.makeFromObserverThread(thread);
         try {
+            fields.push('postsCount', 'filesCount');
             await this.database.threadQueries.updateThread(sThread, fields);
         } catch(error) {
             this._handleDatabaseErrors(error);

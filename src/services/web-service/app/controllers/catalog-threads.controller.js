@@ -14,6 +14,8 @@ function toCatalogThread(stored) {
         viewsCount: stored.viewsCount,
         lastActivity: stored.lastActivity,
         isDeleted: stored.isDeleted,
+        postsCount: stored.postsCount,
+        filesCount: stored.filesCount,
     };
 };
 
@@ -42,7 +44,6 @@ function toCatalogFile(stored) {
     };
 };
 
-
 const catalogThreadsGetApi = async (req, res) => {
     let imageBoard = req.query.imageBoard;
     let board = req.query.board;
@@ -51,7 +52,7 @@ const catalogThreadsGetApi = async (req, res) => {
     imageBoard = imageBoard ? imageBoard : null;
     board = board ? board : null;
     id = Number(id);
-    if(Number.isNaN(id)) {
+    if(req.query.id && Number.isNaN(id)) {
         res.status(400).send('Parameter \'id\' has invalid value.');
         return;
     }
@@ -75,7 +76,7 @@ const catalogThreadsGetApi = async (req, res) => {
             result = await database.fileQueries.selectFirstFileOfPost(object.post.id, false);
             object.file = result !== null ? toCatalogFile(result) : null;
             
-            res.json(object);
+            res.json({threads: object});
         } else {
             let threads = [];
             storedThreads = await database.threadQueries.selectThreads(imageBoard, board, true);
@@ -101,6 +102,24 @@ const catalogThreadsGetApi = async (req, res) => {
 };
 
 
+const boardsListGetApi = async (req, res) => {
+    let imageBoard = req.query.imageBoard;
+    let board = req.query.board;
+
+    imageBoard = imageBoard ? imageBoard : null;
+    board = board ? board : null;
+
+    try {
+        let result = await database.threadQueries.selectBoards(imageBoard, board);
+        res.json(result);
+    } catch(error) {
+        console.log(error);
+        res.status(500).send('Database error has occurred, while working on the request! 505');
+    }
+};
+
+
 module.exports = {
     catalogThreadsGetApi,
+    boardsListGetApi,
 };

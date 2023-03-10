@@ -18,7 +18,7 @@ class StoredThread {
      * @param {number} viewsCount 
      * @param {number} lastActivity 
      */
-    constructor(id, board, imageBoard, number, title, postersCount, createTimestamp, viewsCount, lastActivity, isDeleted) {
+    constructor(id, board, imageBoard, number, title, postersCount, createTimestamp, viewsCount, lastActivity, isDeleted, postsCount, filesCount) {
         this.id = id;
         this.board = board;
         this.imageBoard = imageBoard;
@@ -29,6 +29,8 @@ class StoredThread {
         this.viewsCount = viewsCount;
         this.lastActivity = lastActivity;
         this.isDeleted = isDeleted;
+        this.postsCount = postsCount;
+        this.filesCount = filesCount;
     };
 
 
@@ -53,7 +55,7 @@ class StoredThread {
      * @returns {StoredThread}
      */
     static makeFromTableRow(row) {
-        return new StoredThread(row.id, row.board, row.image_board, row.number, row.title, row.posters_count, row.create_timestamp, row.views_count, row.last_activity, Boolean(row.is_deleted));
+        return new StoredThread(row.id, row.board, row.image_board, row.number, row.title, row.posters_count, row.create_timestamp, row.views_count, row.last_activity, Boolean(row.is_deleted), row.posts_count, row.files_count);
     };
 
     /**
@@ -62,7 +64,7 @@ class StoredThread {
      * @returns {StoredThread}
      */
     static makeFromObserverThread(thread) {
-        return new StoredThread(thread.id, thread.board, thread.imageBoard, thread.number, thread.title, thread.postersCount, thread.createTimestamp, thread.viewsCount, thread.lastActivity, thread.isDeleted);
+        return new StoredThread(thread.id, thread.board, thread.imageBoard, thread.number, thread.title, thread.postersCount, thread.createTimestamp, thread.viewsCount, thread.lastActivity, thread.isDeleted, thread.postsCount, thread.filesCount);
     };
 
 

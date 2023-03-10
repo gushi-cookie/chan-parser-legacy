@@ -42,6 +42,28 @@ class Thread {
         this.imageBoard = imageBoard;
     };
 
+    
+    /**
+     * Compute a posts count of the thread.
+     * @returns {number}
+     */
+    get postsCount() {
+        return this.posts.length;
+    };
+
+    /**
+     * Compute a files count of the thread.
+     * @returns {number}
+     */
+    get filesCount() {
+        let count = 0;
+
+        this.posts.forEach(post => {
+            count += post.files.length;
+        });
+
+        return count;
+    };
 
     /**
      * Check if the thread has a file.

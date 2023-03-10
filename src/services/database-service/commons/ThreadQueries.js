@@ -38,10 +38,50 @@ class ThreadQueries {
             create_timestamp INTEGER NOT NULL,
             views_count      INTEGER NOT NULL,
             last_activity    INTEGER NOT NULL,
-            is_deleted       INTEGER NOT NULL
+            is_deleted       INTEGER NOT NULL,
+            posts_count      INTEGER NOT NULL,
+            files_count      INTEGER NOT NULL
         );`;
 
         await DBUtils.wrapExecQuery(sql, this.database);
+    };
+
+
+    /**
+     * Get a list of stored image boards and boards.
+     * @param {string} imageBoard nullable
+     * @param {string} board nullable
+     * @returns {Promise.<object>} {imageBoard: {board: {threadsCount, postsCount, filesCount}},}
+     * @throws {SQLiteError}
+     */
+    async selectBoards(imageBoard, board) {
+        let sql = 
+        `SELECT DISTINCT image_board, board FROM threads
+            ${(imageBoard || board) ? ' WHERE' : ''}
+            ${imageBoard ? ' AND image_board = \'' + imageBoard + '\'' : ''}
+            ${board ? ' AND board = \'' + board + '\'' : ''}
+        ;`
+        sql = sql.replace('AND', '');
+        let boardRows = await DBUtils.wrapAllQuery(sql, [], this.database);
+    
+        let result = {};
+        let row;
+        for(let i = 0; i < boardRows.length; i++) {
+            imageBoard = boardRows[i].image_board;
+            board = boardRows[i].board;
+
+            if(!result[imageBoard]) {
+                result[imageBoard] = {};
+            }
+            result[imageBoard][board] = {};
+
+            row = await DBUtils.wrapGetQuery(`SELECT COUNT(*) as threads, SUM(posts_count) as posts, SUM(files_count) files FROM threads WHERE image_board = ? AND board = ?;`, [imageBoard, board], this.database);
+            result[imageBoard][board].threadsCount = row.threads;
+            result[imageBoard][board].postsCount = row.posts;
+            result[imageBoard][board].filesCount = row.files;
+        };
+
+        return result;
     };
 
 
@@ -135,10 +175,10 @@ class ThreadQueries {
      */
     async insertThread(thread) {
         let sql =
-        `INSERT INTO threads(id, board, image_board, number, title, posters_count, create_timestamp, views_count, last_activity, is_deleted)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        `INSERT INTO threads(id, board, image_board, number, title, posters_count, create_timestamp, views_count, last_activity, is_deleted, posts_count, files_count)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-        let result = await DBUtils.wrapRunQuery(sql, [thread.id, thread.board, thread.imageBoard, thread.number, thread.title, thread.postersCount, thread.createTimestamp, thread.viewsCount, thread.lastActivity, thread.isDeleted], this.database);
+        let result = await DBUtils.wrapRunQuery(sql, [thread.id, thread.board, thread.imageBoard, thread.number, thread.title, thread.postersCount, thread.createTimestamp, thread.viewsCount, thread.lastActivity, thread.isDeleted, thread.postsCount, thread.filesCount], this.database);
         return result.lastID;
     };
 
