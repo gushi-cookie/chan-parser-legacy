@@ -20,8 +20,9 @@ class StoredFile {
      * @param {boolean} isDeleted 
      * @param {string} extension 
      * @param {Buffer} data 
+     * @param {Buffer} thumbnailData
      */
-    constructor(id, postId, listIndex, url, thumbnailUrl, uploadName, cdnName, checkSum, isDeleted, extension, data) {
+    constructor(id, postId, listIndex, url, thumbnailUrl, uploadName, cdnName, checkSum, isDeleted, extension, data, thumbnailData) {
         this.id = id;
         this.postId = postId;
         this.listIndex = listIndex;
@@ -34,6 +35,7 @@ class StoredFile {
 
         this.extension = extension;
         this.data = data;
+        this.thumbnailData = thumbnailData;
     };
 
 
@@ -58,10 +60,11 @@ class StoredFile {
      * @returns {StoredFile}
      */
     static makeFromTableRow(row) {
-        let file = new StoredFile(row.id, row.post_id, row.list_index, row.url, row.thumbnail_url, row.upload_name, row.cdn_name, row.check_sum, Boolean(row.is_deleted), row.extension, null);
+        let file = new StoredFile(row.id, row.post_id, row.list_index, row.url, row.thumbnail_url, row.upload_name, row.cdn_name, row.check_sum, Boolean(row.is_deleted), row.extension, null, null);
         
         if(row.extension === undefined) file.extension = null;
         if(row.data !== undefined) file.data = row.data;
+        if(row.thumbnail_data !== undefined) file.thumbnailData = row.thumbnail_data;
 
         return file;
     };
@@ -72,20 +75,7 @@ class StoredFile {
      * @returns {StoredFile}
      */
     static makeFromObserverFile(file, postId) {
-        return new StoredFile(file.id, postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, null, null);
-    };
-
-    /**
-     * Form a StoredFile instance from both an observer File and a StashFile.
-     * @param {File} observerFile 
-     * @param {StashFile} stashFile 
-     * @returns {StoredFile}
-     */
-    static makeFromStashFile(observerFile, stashFile, postId) {
-        let file = StoredFile.makeFromObserverFile(observerFile, postId);
-        file.extension = stashFile.fileExtension;
-        file.data = stashFile.buffer;
-        return file;
+        return new StoredFile(file.id, postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, null, null, null);
     };
 
 
@@ -97,14 +87,6 @@ class StoredFile {
         let file = new File(this.listIndex, this.url, this.thumbnailUrl, this.uploadName, this.cdnName, this.checkSum, this.isDeleted);
         file.id = this.id;
         return file;
-    };
-
-    /**
-     * Convert this file to the StashPair files of the FileStasherService service.
-     * @returns {import('../../file-stasher-service/FileStasherService').StashPair}
-     */
-    toStashPair(outputDir, subdirName) {
-        return StashFile.makeFromFile(this.toObserverFile, outputDir, subdirName);
     };
 };
 

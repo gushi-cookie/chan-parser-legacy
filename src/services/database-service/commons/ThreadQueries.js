@@ -155,7 +155,7 @@ class ThreadQueries {
         posts.forEach((post) => {
             postIDs.push(post.id);
         });
-        let files = await this.fileQueries.selectFilesOfPosts(postIDs, false);
+        let files = await this.fileQueries.selectFilesOfPosts(postIDs, ['data', 'thumbnail_data']);
 
         return {
             thread,

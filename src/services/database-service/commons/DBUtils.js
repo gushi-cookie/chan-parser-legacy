@@ -103,6 +103,16 @@ const camelToSnakeCase = (str) => {
     return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 };
 
+/**
+ * Create a list of sql value placeholders, divided by commas and enclosed with brackets.
+ * @param {number} amount 
+ * @returns {string} '(?, ?, ?,...)'
+ */
+const formValuePlaceholders = (amount) => {
+    let result = '?, '.repeat(amount);
+    result = result.slice(0, result.length - 1);
+    return `(${result})`;
+};
 
 module.exports = {
     wrapGetQuery,
@@ -111,4 +121,5 @@ module.exports = {
     wrapRunQuery,
     snakeToCamelCase,
     camelToSnakeCase,
+    formValuePlaceholders,
 };

@@ -73,7 +73,7 @@ const catalogThreadsGetApi = async (req, res) => {
             result = await database.postQueries.selectFirstPostOfThread(id);
             object.post = toCatalogPost(result);
 
-            result = await database.fileQueries.selectFirstFileOfPost(object.post.id, false);
+            result = await database.fileQueries.selectFirstFileOfPost(object.post.id, ['data', 'thumbnail_data']);
             object.file = result !== null ? toCatalogFile(result) : null;
             
             res.json({threads: object});
@@ -87,7 +87,7 @@ const catalogThreadsGetApi = async (req, res) => {
                 result = await database.postQueries.selectFirstPostOfThread(object.thread.id);
                 object.post = toCatalogPost(result);
 
-                result = await database.fileQueries.selectFirstFileOfPost(object.post.id, false);
+                result = await database.fileQueries.selectFirstFileOfPost(object.post.id, ['data', 'thumbnail_data']);
                 object.file = result !== null ? toCatalogFile(result) : null;
             
                 threads.push(object);

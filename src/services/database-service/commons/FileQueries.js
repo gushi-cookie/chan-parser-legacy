@@ -23,17 +23,18 @@ class FileQueries {
     async createTable() {
         let sql = 
         `CREATE TABLE IF NOT EXISTS files (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id       INTEGER NOT NULL,
-            list_index    INTEGER NOT NULL,
-            url           TEXT NOT NULL,
-            thumbnail_url TEXT NOT NULL,
-            upload_name   TEXT NOT NULL,
-            cdn_name      TEXT NOT NULL,
-            check_sum     TEXT NOT NULL,
-            is_deleted    INTEGER NOT NULL,
-            extension     TEXT,
-            data          BLOB,
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id        INTEGER NOT NULL,
+            list_index     INTEGER NOT NULL,
+            url            TEXT NOT NULL,
+            thumbnail_url  TEXT NOT NULL,
+            upload_name    TEXT NOT NULL,
+            cdn_name       TEXT NOT NULL,
+            check_sum      TEXT NOT NULL,
+            is_deleted     INTEGER NOT NULL,
+            extension      TEXT,
+            data           BLOB,
+            thumbnail_data BLOB,
             FOREIGN KEY (post_id)
                 REFERENCES posts (id)
                 ON DELETE CASCADE
@@ -43,46 +44,63 @@ class FileQueries {
         await DBUtils.wrapExecQuery(sql, this.database);
     };
 
+    /**
+     * Make a list of the files table columns, divided with commas.
+     * @param {string[]} excludedColumns List of column names to be excluded from the returned list.
+     * @returns {string} 'id, post_id, list_index,...'
+     */
+    static listTableColumns(excludedColumns) {
+        let columns = ['id', 'post_id', 'list_index', 'url', 'thumbnail_url', 'upload_name', 'cdn_name', 'check_sum', 'is_deleted', 'extension', 'data', 'thumbnail_data'];
+
+        let index;
+        excludedColumns.forEach(name => {
+            index = columns.indexOf(name);
+            if(index !== -1) {
+                columns.splice(index, 1);
+            }
+        });
+        
+        let result = '';
+        columns.forEach(name => {
+            result += `${name}, `;
+        });
+        return result.slice(0, result.length - 2);
+    };
 
     /**
      * Select a specific file by its id.
      * @param {number} id Id of the file.
-     * @param {boolean} includeData Should data column be included.
+     * @param {string[]} excludedColumns Column names of the files table, which shouldn't be queried.
      * @returns {Promise.<StoredFile | null>}
      * @throws {SQLiteError}
      */
-    async selectFileById(id, includeData) {
-        let sql;
-        if(includeData) {
-            sql = 
-            `SELECT * FROM files WHERE id = ${id};`;
-        } else {
-            sql = 
-            `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
-                FROM files WHERE id = ${id};`;
-        }
+    async selectFileById(id, excludedColumns) {
+        let sql = `SELECT ${FileQueries.listTableColumns(excludedColumns)} FROM files WHERE id = ${id};`;
+        return StoredFile.makeFromTableRow(await DBUtils.wrapGetQuery(sql, [], this.database));
+    };
 
+    /**
+     * Select a file by url.
+     * @param {string} url Url of the file.
+     * @param {string[]} excludedColumns Column names of the files table, which shouldn't be queried.
+     * @returns {Promise.<StoredFile | null>}
+     * @throws {SQLiteError}
+     */
+    async selectFileByUrl(url, excludedColumns) {
+        let sql = `SELECT ${FileQueries.listTableColumns(excludedColumns)} FROM files WHERE url = '${url}';`;
         return StoredFile.makeFromTableRow(await DBUtils.wrapGetQuery(sql, [], this.database));
     };
 
     /**
      * Select the first file of a specific post, by its list_index column.
      * @param {number} postId Id of the post.
-     * @param {boolean} includeData Should data column be included.
+     * @param {string[]} excludedColumns Column names of the files table, which shouldn't be queried.
      * @returns {Promise.<StoredFile | null>}
      * @throws {SQLiteError}
      */
-    async selectFirstFileOfPost(postId, includeData) {
-        let sql;
-        if(includeData) {
-            sql = 
-            `SELECT * FROM files WHERE post_id = ${postId} AND list_index = 0;`;
-        } else {
-            sql = 
-            `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
-                FROM files WHERE post_id = ${postId} AND list_index = 0;`;
-        }
-        
+    async selectFirstFileOfPost(postId, excludedColumns) {
+        let sql = `SELECT ${FileQueries.listTableColumns(excludedColumns)} FROM files WHERE post_id = ${postId} AND list_index = 0;`;
+
         let row = await DBUtils.wrapGetQuery(sql, [], this.database);
         if(row !== null) {
             return StoredFile.makeFromTableRow(row);
@@ -94,21 +112,12 @@ class FileQueries {
     /**
      * Select all files of a specific post.
      * @param {number} postId Id of the post.
-     * @param {boolean} includeData Should data column be included.
+     * @param {string[]} excludedColumns Column names of the files table, which shouldn't be queried.
      * @returns {Promise<StoredFile[]>} 
      * @throws {SQLiteError}
      */
-    async selectFilesOfPost(postId, includeData) {
-        let sql;
-        if(includeData) {
-            sql =
-            `SELECT * FROM files WHERE post_id = ${postId};`;
-        } else {
-            sql =
-            `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
-                FROM files WHERE post_id = ${postId};`;
-        }
-        
+    async selectFilesOfPost(postId, excludedColumns) {
+        let sql = `SELECT ${FileQueries.listTableColumns(excludedColumns)} FROM files WHERE post_id = ${postId};`;
         let rows = await DBUtils.wrapAllQuery(sql, [], this.database);
         let files = [];
         for(let i = 0; i < rows.length; i++) {
@@ -120,11 +129,11 @@ class FileQueries {
     /**
      * Select all files of specific posts.
      * @param {number[]} postIDs Ids of posts.
-     * @param {boolean} includeData Should data column be included.
+     * @param {string[]} excludedColumns Column names of the files table, which shouldn't be queried.
      * @returns {Promise.<StoredFile[]>}
      * @throws {SQLiteError}
      */
-    async selectFilesOfPosts(postIDs, includeData) {
+    async selectFilesOfPosts(postIDs, excludedColumns) {
         if(postIDs.length === 0) return [];
 
         let ids = '';
@@ -133,16 +142,7 @@ class FileQueries {
         });
         ids = `(${ids.slice(0, ids.length - 1)})`;
 
-        let sql;
-        if(includeData) {
-            sql = 
-            `SELECT * FROM files WHERE post_id IN ${ids};`;
-        } else {
-            sql = 
-            `SELECT id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension
-                FROM files WHERE post_id IN ${ids};`;
-        }
-
+        let sql = `SELECT ${FileQueries.listTableColumns(excludedColumns)} FROM files WHERE post_id IN ${ids};`;
         let rows = await DBUtils.wrapAllQuery(sql, [], this.database);
 
         let files = [];
@@ -163,10 +163,10 @@ class FileQueries {
      */
     async insertFile(file) {
         let sql = 
-        `INSERT INTO files(id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension, data)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+        `INSERT INTO files(id, post_id, list_index, url, thumbnail_url, upload_name, cdn_name, check_sum, is_deleted, extension, data, thumbnail_data)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
         
-        let result = await DBUtils.wrapRunQuery(sql, [file.id, file.postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, file.extension, file.data], this.database);
+        let result = await DBUtils.wrapRunQuery(sql, [file.id, file.postId, file.listIndex, file.url, file.thumbnailUrl, file.uploadName, file.cdnName, file.checkSum, file.isDeleted, file.extension, file.data, file.thumbnailData], this.database);
         return result.lastID;
     };
 
