@@ -7,16 +7,16 @@ const StreamPromise = require('node:stream/promises');
 const Stream = require('node:stream');
 
 /**
- * This class represents a single file with data and functional to download the file, store it in the programm and write it in the file system.
+ * Class represents a single file's data, and methods for working with fs and http, for the file.
  */
 class StashFile {
 
     /**
      * Create an instance of the StashFile class.
-     * @param {string} url http(s) address to the file.
-     * @param {string} fileName the name of the file.
-     * @param {string} outputDir path to a dir where to write the file. No '/' in the end.
-     * @param {string} subdirName additional directory in the outputDir path. Pass null if no subdir. No '/' in the name.
+     * @param {string} url Url for obtaining the file.
+     * @param {string} fileName Name of the file.
+     * @param {string} outputDir Path to a directory where to write the file. No '/' in the end.
+     * @param {string} subdirName Additional directory in the outputDir path. Pass null if no subdir. No '/' in the name.
      */
     constructor(url, fileName, outputDir, subdirName) {
         if(outputDir[outputDir.length-1] === '/') {
@@ -30,7 +30,7 @@ class StashFile {
 
         /** @type {boolean}*/ this.isFetched = false;
         /** @type {string} */ this.fileExtension = null;
-        /** @type {Stream} */ this.buffer = null;
+        /** @type {Buffer} */ this.buffer = null;
         /** @type {boolean}*/ this.notFound = false;
 
         /** @type {string} */ this.url = url;
@@ -42,11 +42,11 @@ class StashFile {
 
 
     /**
-     * Form path to the file from the location data.
-     * @param {boolean} forFile
-     * @returns {string | null} path to the file.
+     * Form path to an output directory of the file.
+     * @param {boolean} includeFileName Should file name and extension be added to the end of the path.  
+     * @returns {string | null} Path to the file or to the output directory.
      */
-    formOutputPath(forFile) {
+    formOutputPath(includeFileName) {
         let result;
 
         if(this.subdirName !== null) {
@@ -55,7 +55,7 @@ class StashFile {
             result = `${this.outputDir}`;
         }
 
-        if(forFile) {
+        if(includeFileName) {
             if(this.fileExtension === null) return null;
             result += `/${this.fileName}.${this.fileExtension}`;
         }
@@ -64,33 +64,34 @@ class StashFile {
     };
     
     /**
-     * 
+     * Probe if the output path exists, and create a new one if no.
      */
     async checkOutputDir() {
         await fsp.mkdir(this.formOutputPath(false), {recursive: true});
     };
 
     /**
-     * Delete the file if it exists.
-     * @returns {boolean}
+     * Delete the file if it exists in the output directory.
+     * @returns {Promise.<boolean>}
      */
     async deleteFile() {
         try {
             await fsp.rm(this.formOutputPath(true));
+            return true;
         } catch(error) {
-            if(error.code !== 'ENOENT') {
-                throw error;
-            }
+            if(error.code !== 'ENOENT') throw error;
+            return false;
         }
     };
 
 
     /**
-     * Check if the file exists.
+     * Check if the file exists in the output directory.
+     * @returns {Promise.<boolean>}
      */
     async checkFileExistence() {
         try {
-            await fs.stat(this.formOutputPath(true));
+            await fsp.stat(this.formOutputPath(true));
             return true;
         } catch(error) {
             if(error.code === 'ENOENT') {
@@ -104,7 +105,7 @@ class StashFile {
 
     /**
      * Write file from the buffer to the output directory.
-     * @param {boolean} clearBuffer clear buffer after successful writing the file.
+     * @param {boolean} clearBuffer Should the buffer be set to null after successful writing the file.
      */
     async flush(clearBuffer) {
         await this.checkOutputDir();
@@ -119,10 +120,7 @@ class StashFile {
     /**
      * Fetch the file by the url and set it to the buffer.
      * Method also sets fileExtension, notFound and isFetched variables.
-     * 
-     * Note that Axios doesn't fire error if connection is reset (forcibly closed by a peer; in some cases).
-     * This means that a fetched stream from response may be broken and, if try to read it, ECONNRESET error may to occur.
-     * @returns {Promise.<number | void>} void on success or 404.
+     * @returns {Promise.<number | undefined>} Undefined on success or 404 on not found.
      * @throws {AxiosError | ECONNRESET}
      */
     async fetchFile() {
@@ -161,17 +159,14 @@ class StashFile {
 
 
     /**
-     * Make two StashFile objects (file and thumbnail) from a File instance.
-     * @param {File} file ThreadsObserverService file.
-     * @param {string} outputDir path to an output directory.
-     * @param {string} subdirName pass null if no subdir.
-     * @returns {import('../FileStasherService').StashPair} object with two fields: file, thumbnail.
+     * Make a StashFile instance from an observer File instance.
+     * @param {File} file ThreadsObserverService's file.
+     * @param {string} outputDir Path to an output directory.
+     * @param {string} subdirName Set null if no subdir.
+     * @returns {StashFile}
      */
-    static makeFromFile(file, outputDir, subdirName) {
-        return {
-            file: new StashFile(file.url, file.cdnName, outputDir, subdirName),
-            thumbnail: new StashFile(file.thumbnailUrl, file.cdnName + '_thumbnail', outputDir, subdirName),
-        };
+    static makeFromObserverFile(file, outputDir, subdirName) {
+        return new StashFile(file.url, file.cdnName, outputDir, subdirName);
     };
 };
 

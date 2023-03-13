@@ -9,7 +9,7 @@ const database = process.database;
 const cdnFile = async (req, res) => {
     let file;
     try {
-        file = await database.fileQueries.selectFileById(req.params.id, ['data', 'thumbnail_data']);
+        file = await database.fileQueries.selectFileById(req.params.id, ['thumbnail_data']);
     } catch(error) {
         console.log(error);
         res.status(500).send('Database error has occurred, while working on the request! 505');

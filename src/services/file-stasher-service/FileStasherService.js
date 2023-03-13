@@ -1,15 +1,15 @@
+const fs = require('node:fs');
 const fsp = require('node:fs/promises');
+const child_process = require('node:child_process');
+const sharp = require('sharp');
+const crypto = require('node:crypto');
+const Stream = require('node:stream');
+const StreamPromise = require('node:stream/promises');
 const EventEmitter = require('node:events');
 const StashFile = require('./commons/StashFile');
 const FileCreateEvent = require('../threads-observer-service/events/FileCreateEvent');
 const FileDeleteEvent = require('../threads-observer-service/events/FileDeleteEvent');
 const ThreadDeleteEvent = require('../threads-observer-service/events/ThreadDeleteEvent');
-
-/**
- * @typedef {Object} StashPair
- * @property {StashFile} file
- * @property {StashFile} thumbnail
- */
 
 
 /**
@@ -19,26 +19,28 @@ class FileStasherService extends EventEmitter {
 
     /**
      * Create an instance of the FileStasherService class.
-     * @param {ThreadsObserverService} threadsObserverService vital service.
-     * @param {boolean} stashFreshFilesOnly should only new files to be stashed.
-     * @param {string} outputDir path to a dir where to write StashFiles. No '/' in the end.
-     * @param {boolean} stashThumbnails should service download thumbnails too.
-     * @param {number} suspiciousInterval interval in milliseconds for the suspicious mode.
+     * @param {ThreadsObserverService} threadsObserverService Vital service.
+     * @param {boolean} stashFreshFilesOnly Should only new files be stashed.
+     * @param {string} outputDir Path to a directory where to write StashFiles. No '/' in the end.
+     * @param {number} suspiciousInterval Interval in milliseconds for the suspicious mode.
      */
-    constructor(threadsObserverService, stashFreshFilesOnly, outputDir, stashThumbnails, suspiciousInterval) {
+    constructor(threadsObserverService, stashFreshFilesOnly, outputDir, suspiciousInterval) {
         super();
 
         if(outputDir[outputDir.length-1] === '/') {
             outputDir = outputDir.slice(0, outputDir.length-1);
         }
 
-        /** @type {ThreadsObserverService} */ this.threadsObserverService = threadsObserverService;
+        /** @type {import('../threads-observer-service/ThreadsObserverService')} */
+        this.threadsObserverService = threadsObserverService;
 
-        /** @type {Array.<StashPair>} */ this.pairsStorage = [];
+        /** @type {import('../database-service/DatabaseService')} */
+        this.database = null;
+
+        /** @type {Array.<StashFile>} */ this.files = [];
 
         /** @type {boolean} */ this.stashFreshFilesOnly = stashFreshFilesOnly;
         /** @type {string}  */ this.outputDir = outputDir;
-        /** @type {boolean} */ this.stashThumbnails = stashThumbnails;
         /** @type {number}  */ this.suspiciousInterval = suspiciousInterval;
         /** @type {Array.<Object>} */ this.suspiciousTimeouts = [];
 
@@ -54,215 +56,403 @@ class FileStasherService extends EventEmitter {
 
 
 
-    // ############
-    // Web Requests
-    // ############
-
-    /**
-     * Try to fetch files of a stash pair.
-     * @param {boolean} flush flush the stash pair on succeed.
-     * @throws {AxiosError | ECONNRESET}
-     */
-    async fetchPair(pair, flush) {
-        let result;
-        if(this.stashThumbnails) {
-            result = await pair.thumbnail.fetchFile();
-            if(result !== 404 && flush) await pair.thumbnail.flush(true);
-        }
-
-        result = await pair.file.fetchFile();
-        if(result !== 404 && flush) await pair.file.flush(true);
-    };
-    
-
-
     // #############
     // Mode Controls
     // #############
+
+    /**
+     * Delay a current thread (current code execution).
+     * @param {number} delay Delay in milliseconds.
+     */
+    async _wait(delay) {
+        return new Promise((resolve) => { setTimeout(resolve, delay); });
+    };
+
+    /**
+     * Work with an axios error.
+     * @param {AxiosError} error 
+     */
+    _handleFetchErrors(error) {
+        // TO-DO Log error
+        console.log(error.message);
+    };
+
+    /**
+     * Work with a sqlite error.
+     * @param {SQLiteError} error 
+     */
+    _handleDatabaseErrors(error) {
+        // TO-DO Log error
+        console.log(error);
+    };
+
+
+    /**
+     * Fetch all stored files from the ThreadsObserverService and return them.
+     * 
+     * Note: this method works only when stasherRunning is set to true.
+     * @param {boolean} databaseCorrelate Check if a file already stored in the database, before fetching it.
+     * @param {boolean} flushOnly If true then a file will be flushed instantly after a successful fetch. Nothing will be in the return.
+     * @returns {Promise.<StashFile | undefined>}
+     */
+    async _fetchStaleFiles(databaseCorrelate, flushOnly) {
+        let threads = this.threadsObserverService.slice();
+
+        let stashFiles = [];
+        let stashFile;
+        let threadFiles;
+        let storedFile;
+        for(let i = 0; i < threads.length; i++) {
+            if(!this.stasherRunning) return stashFiles;
+            threadFiles = threads[i].getFiles();
+
+            for(let j = 0; j < threadFiles.length; j++) {
+                if(!this.stasherRunning) return stashFiles;
+                stashFile = StashFile.makeFromObserverFile(threadFiles[j], this.outputDir, threads[i].number.toString());
+
+                if(databaseCorrelate) {
+                    try {
+                        // storedFile = await this.database.fileQueries.selectFileByUrl(stashFile.url, false);
+                        if(storedFile !== null && storedFile.extension !== null) continue;
+                    } catch(error) {
+                        this._handleDatabaseErrors(error);
+                        continue;
+                    }
+                }
+
+                try {
+                    await stashFile.fetchFile();
+                    await this._wait(this.stasherDelay);
+                    if(flushOnly) {
+                        await stashFile.flush(true);
+                    } else {
+                        stashFiles.push(stashFile);
+                    }
+                } catch(error) {
+                    this._handleFetchErrors(error);
+                }
+            }
+        }
+
+        if(!flushOnly) {
+            return stashFiles;
+        }
+    };
+
+    /**
+     * Create thumbnail from a image or a video, represented in a buffer.
+     * @param {string} extension File extension of the buffer file.
+     * @param {Buffer} buffer File data.
+     * @returns {Promise.<Buffer>} Thumbnail in png format.
+     * @throws {FSError} Occurs when fs errors happen.
+     * @throws {SharpError} Thrown by Sharp library.
+     * @throws {ExtensionError} Thrown if a passed extension is not supported.
+     */
+    async _createThumbnail(extension, buffer) {
+        extension = extension.toLowerCase();
+
+        let cachePath = '/dev/shm/.chan_parser';
+        let supportedImageExts = ['jpeg', 'jpg', 'png', 'webp', 'avif', 'gif', 'svg', 'tiff'];
+        let supportedVideoExts = ['mp4', 'm4p', 'mov', 'wmv', 'avi', 'mkv', 'webm', 'flv', 'vob', 'ogv', 'ogg'];
+
+        if(supportedImageExts.includes(extension)) {
+            return await sharp(buffer).resize({
+                fit: sharp.fit.contain,
+                width: 250,
+            }).png().toBuffer();
+        }
+
+        if(!supportedVideoExts.includes(extension)) {
+            throw new Error(`Extension '${extension}' is not supported.`);
+        }
+
+        let filename = crypto.randomBytes(20).toString('hex');
+        await fsp.mkdir(cachePath, {recursive: true});
+        await StreamPromise.pipeline(Stream.Readable.from(buffer), fs.createWriteStream(`${cachePath}/${filename}.${extension}`));
+        child_process.execSync(`ffmpegthumbnailer -i ${filename}.${extension} -o ${filename}.png -s 250`, { cwd: cachePath });
+
+        buffer = await new Promise((resolve, reject) => {
+            let stream = fs.createReadStream(`${cachePath}/${filename}.png`);
+            let chunks = [];
+            stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            stream.on('error', (error) => reject(error));
+            stream.on('end', () => {
+                resolve(Buffer.concat(chunks));
+            });
+        });
+        await fsp.rm(`${cachePath}/${filename}.${extension}`);
+        await fsp.rm(`${cachePath}/${filename}.png`);
+        return buffer;
+    };
+
+    /**
+     * In this mode these happen:
+     * - download all files and store them in the database.
+     * - create thumbnails of media files and store them in the database.
+     * - remove a file from the storage after all manipulations.
+     */
+    _webMode() {
+        let fileCreateHandler = (/**@type {FileCreateEvent}*/ event) => {
+            this.files.push(StashFile.makeFromObserverFile(event.file, this.outputDir, event.thread.number.toString()));
+        };
+
+        this.fileCreateHandler = fileCreateHandler;
+        this.threadsObserverService.on(FileCreateEvent.name, fileCreateHandler);
+
+        let web = async () => {
+            let file = this.getFirstNotFetchedFile();
+            if(file === null) return;
+            
+            let connResetOccurred = false;
+            try {
+                await file.fetchFile();
+            } catch(error) {
+                if(error.code === 'ECONNRESET') {
+                    console.log(`Error 'ECONNRESET' occurred. URL: ${file.url}. Second attempt to fetch the file.`);
+                    connResetOccurred = true;
+                } else {
+                    this._handleDatabaseErrors(error);
+                    this.files.splice(this.files.indexOf(file), 1);
+                    return;
+                }
+            }
+
+            if(connResetOccurred) {
+                try {
+                    await this._wait(this.stasherDelay);
+                    await file.fetchFile();
+                } catch(error) {
+                    console.log(`The second attempt of fetching the file has ended with error. URL: ${file.url}`);
+                    console.log(error);
+                    this.files.splice(this.files.indexOf(file), 1);
+                    return;
+                }
+            }
+            
+            if(file.notFound) {
+                this.files.splice(this.files.indexOf(file), 1);
+                return;
+            }
+
+            try {
+                let storedFile = await this.database.fileQueries.selectFileByUrl(file.url, ['data', 'thumbnail_data']);
+                if(storedFile !== null && storedFile.extension === null) {
+                    storedFile.extension = file.fileExtension;
+                    storedFile.data = file.buffer;
+                    storedFile.thumbnailData = await this._createThumbnail(file.fileExtension, file.buffer);
+                    await this.database.fileQueries.updateFile(storedFile, ['extension', 'data', 'thumbnailData']);
+                }
+            } catch(error) {
+                this._handleDatabaseErrors(error);
+            }
+
+            this.files.splice(this.files.indexOf(file), 1);
+        };
+
+        // Starter.
+        let recursiveTimer = async () => {
+            this.stasherRunning && await web();
+            this.stasherRunning && await this._wait(this.stasherDelay);
+            this.stasherRunning && recursiveTimer();
+        };
+
+        this.stasherRunning = true;
+        setTimeout(recursiveTimer, this.stasherDelay);
+    };
+
+    /**
+     * In this mode these happen:
+     * - download all files.
+     * - write downloaded files to the output directory.
+     * - remove written files from the storage.
+     */
+    _allInMode() {
+        let fileCreateHandler = (/**@type {FileCreateEvent}*/ event) => {
+            this.files.push(StashFile.makeFromObserverFile(event.file, this.outputDir, event.thread.number.toString()));
+        };
+
+        this.fileCreateHandler = fileCreateHandler;
+        this.threadsObserverService.on(FileCreateEvent.name, fileCreateHandler);
+
+        // if(!this.stashFreshFilesOnly) {
+        //     this._fetchStaleFiles(false, true);
+        // }
+
+        let allIn = async () => {
+            let file = this.getFirstNotFetchedFile();
+            if(file === null) return;
+            
+            let connResetOccurred = false;
+            try {
+                await file.fetchFile();
+                await file.flush(true);
+            } catch(error) {
+                if(error.code === 'ECONNRESET') {
+                    console.log(`Error 'ECONNRESET' occurred. URL: ${file.url}. Second attempt to fetch the file.`);
+                    connResetOccurred = true;
+                } else {
+                    // TO-DO Log error
+                    console.log(error);
+                    this.files.splice(this.files.indexOf(file), 1);
+                    return;
+                }
+            }
+
+            if(connResetOccurred) {
+                try {
+                    await this._wait(this.stasherDelay);
+                    await file.fetchFile();
+                    await file.flush(true);
+                } catch(error) {
+                    console.log(`The second attempt of fetching the file has ended with error. URL: ${file.url}`);
+                    console.log(error);
+                }
+            }
+
+            this.files.splice(this.files.indexOf(file), 1);
+        };
+
+        // Starter.
+        let recursiveTimer = async () => {
+            this.stasherRunning && await allIn();
+            this.stasherRunning && await this._wait(this.stasherDelay);
+            this.stasherRunning && recursiveTimer();
+        };
+
+        this.stasherRunning = true;
+        setTimeout(recursiveTimer, this.stasherDelay);
+    };
+
+    /**
+     * In this mode these happen:
+     * - download all new added files and store them in the memory.
+     * - attach a timer to each stored file.
+     * - if a file is deleted before its timer ends, then the file is written to the output directory.
+     * - if a file is not deleted by the end of its timer, then the file is removed from the storage, without writing.
+     */
+    _suspiciousMode() {
+        let fileCreateHandler = (/**@type {FileCreateEvent}*/ event) => {
+            this.files.push(StashFile.makeFromObserverFile(event.file, this.outputDir, event.thread.number.toString()));
+        };
+
+        let fileDeleteHandler = async (/**@type {FileDeleteEvent}*/ event) => {
+            let timeoutObj = this.getSuspiciousTimeoutByUrl(event.file.url);
+            if(timeoutObj === null) return;
+
+            clearTimeout(timeoutObj.timeout);
+            await timeoutObj.file.flush(true);
+
+            this.suspiciousTimeouts.splice(this.suspiciousTimeouts.indexOf(timeoutObj), 1);
+            this.files.splice(this.files.indexOf(timeoutObj.file), 1);
+        };
+
+        let threadDeleteHandler = async (/**@type {ThreadDeleteEvent}*/ event) => {
+            let timeoutObj;
+            let threadFiles = event.thread.getFiles();
+            for(let i = 0; i < threadFiles.length; i++) {
+                timeoutObj = this.getSuspiciousTimeoutByUrl(threadFiles[i].url);
+                if(timeoutObj === null) continue;
+
+                clearTimeout(timeoutObj.timeout);
+                await timeoutObj.file.flush(true);
+
+                this.suspiciousTimeouts.splice(this.suspiciousTimeouts.indexOf(timeoutObj), 1);
+                this.files.splice(this.files.indexOf(timeoutObj.file), 1);
+            }
+        };
+
+        this.fileCreateHandler = fileCreateHandler;
+        this.fileDeleteHandler = fileDeleteHandler;
+        this.threadDeleteHandler = threadDeleteHandler;
+        this.threadsObserverService.on(FileCreateEvent.name, fileCreateHandler);
+        this.threadsObserverService.on(FileDeleteEvent.name, fileDeleteHandler);
+        this.threadsObserverService.on(ThreadDeleteEvent.name, threadDeleteHandler);
+
+
+        let suspicious = async () => {
+            let file = this.getFirstNotFetchedFile();
+            if(file === null) return;
+
+            let connResetOccurred = false;
+            try {
+                await file.fetchFile();
+            } catch(error) {
+                if(error.code === 'ECONNRESET') {
+                    console.log(`Error 'ECONNRESET' occurred. URL: ${file.url}. Second attempt to fetch the file.`);
+                    connResetOccurred = true;
+                } else {
+                    // TO-DO Log error
+                    console.log(error);
+                    this.files.splice(this.files.indexOf(file), 1);
+                    return;
+                }
+            }
+
+            if(connResetOccurred) {
+                try {
+                    await this._wait(this.stasherDelay);
+                    await file.fetchFile();
+                } catch(error) {
+                    console.log(`The second attempt of fetching the file has ended with error. URL: ${file.url}`);
+                    console.log(error);
+                    this.files.splice(this.files.indexOf(file), 1);
+                    return;
+                }
+            }
+
+
+            if(file.notFound) {
+                this.files.splice(this.files.indexOf(file), 1);
+            } else {
+                let obj = {};
+                obj.file = file;
+                obj.timeout = setTimeout(() => {
+                    this.files.splice(this.files.indexOf(file), 1);
+                    this.suspiciousTimeouts.splice(this.suspiciousTimeouts.indexOf(obj), 1);
+                }, this.suspiciousInterval);
+
+                this.suspiciousTimeouts.push(obj);
+            }
+        };
+
+        // Starter.
+        let recursiveTimer = async () => {
+            this.stasherRunning && await suspicious();
+            this.stasherRunning && await this._wait(this.stasherDelay);
+            this.stasherRunning && recursiveTimer();
+        };
+
+        this.stasherRunning = true;
+        setTimeout(recursiveTimer, this.stasherDelay);
+    };
+
 
     /**
      * Start the stasher service in a specific mode.
      * @param {string} mode available: slave, all-in, suspicious.
      */
     async startStasher(mode) {
-        if(!['slave', 'all-in', 'suspicious'].includes(mode)) {
+        if(!['web', 'all-in', 'suspicious'].includes(mode)) {
             throw new Error(`Mode: ${mode} is not supported.`);
         }
 
-        let wait = async (delay) => {
-            return new Promise((resolve) => { setTimeout(resolve, delay); });
-        };
-
+        this.database = process.database;
         this.mode = mode;
         await this.checkOutputDir();
+        
 
-
-        let slaveMode = () => {
-
-        };
-
-        let allInMode = () => {
-            let fileCreateHandler = (/**@type {FileCreateEvent}*/ event) => {
-                this.pairsStorage.push(StashFile.makeFromFile(event.file, this.outputDir, event.thread.number.toString()));
-            };
-
-            this.fileCreateHandler = fileCreateHandler;
-            this.threadsObserverService.on(FileCreateEvent.name, fileCreateHandler);
-    
-
-            let allIn = async () => {
-                let pair = this.getFirstNotFetchedPair();
-                if(pair === null) return;
-                
-                let connResetOccurred = false;
-                try {
-                    await this.fetchPair(pair, true);
-                } catch(error) {
-                    if(error.code === 'ECONNRESET') {
-                        console.log(`Error 'ECONNRESET' occurred. URL: ${pair.file.url}. Second attempt to fetch the file.`);
-                        connResetOccurred = true;
-                    } else {
-                        // TO-DO Log error
-                        console.log(error);
-                        this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
-                        return;
-                    }
-                }
-
-                if(connResetOccurred) {
-                    try {
-                        await wait(this.stasherDelay);
-                        await this.fetchPair(pair, true);
-                    } catch(error) {
-                        console.log(`The second attempt of fetching the file has ended with error. URL: ${pair.file.url}`);
-                        console.log(error);
-                    }
-                }
-
-                this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
-            };
-
-            // Starter.
-            let recursiveTimer = async () => {
-                this.stasherRunning && await allIn();
-                this.stasherRunning && await wait(this.stasherDelay);
-                this.stasherRunning && recursiveTimer();
-            };
-
-            this.stasherRunning = true;
-            setTimeout(recursiveTimer, this.stasherDelay);
-        };
-
-        let suspiciousMode = () => {
-            let fileCreateHandler = (/**@type {FileCreateEvent}*/ event) => {
-                this.pairsStorage.push(StashFile.makeFromFile(event.file, this.outputDir, event.thread.number.toString()));
-            };
-
-            let fileDeleteHandler = async (/**@type {FileDeleteEvent}*/ event) => {
-                let timeoutObj = this.getSuspiciousTimeoutByFile(event.file);
-                if(timeoutObj === null) return;
-
-                clearTimeout(timeoutObj.timeout);
-                await timeoutObj.pair.file.flush(true);
-                if(this.stashThumbnails) await timeoutObj.pair.thumbnail.flush(true);
-
-                this.suspiciousTimeouts.splice(this.suspiciousTimeouts.indexOf(timeoutObj), 1);
-                this.pairsStorage.splice(this.pairsStorage.indexOf(timeoutObj.pair), 1);
-            };
-
-            let threadDeleteHandler = async (/**@type {ThreadDeleteEvent}*/ event) => {
-                let timeoutObj;
-                let threadFiles = event.thread.getFiles();
-                for(let i = 0; i < threadFiles.length; i++) {
-                    timeoutObj = this.getSuspiciousTimeoutByFile(threadFiles[i]);
-                    if(timeoutObj === null) continue;
-
-                    clearTimeout(timeoutObj.timeout);
-                    await timeoutObj.pair.file.flush(true);
-                    if(this.stashThumbnails) await timeoutObj.pair.thumbnail.flush(true);
-
-                    this.suspiciousTimeouts.splice(this.suspiciousTimeouts.indexOf(timeoutObj), 1);
-                    this.pairsStorage.splice(this.pairsStorage.indexOf(timeoutObj.pair), 1);
-                }
-            };
-
-            this.fileCreateHandler = fileCreateHandler;
-            this.fileDeleteHandler = fileDeleteHandler;
-            this.threadDeleteHandler = threadDeleteHandler;
-            this.threadsObserverService.on(FileCreateEvent.name, fileCreateHandler);
-            this.threadsObserverService.on(FileDeleteEvent.name, fileDeleteHandler);
-            this.threadsObserverService.on(ThreadDeleteEvent.name, threadDeleteHandler);
-
-    
-            let suspicious = async () => {
-                let pair = this.getFirstNotFetchedPair();
-                if(pair === null) return;
-
-                let connResetOccurred = false;
-                try {
-                    await this.fetchPair(pair, false);
-                } catch(error) {
-                    if(error.code === 'ECONNRESET') {
-                        console.log(`Error 'ECONNRESET' occurred. URL: ${pair.file.url}. Second attempt to fetch the file.`);
-                        connResetOccurred = true;
-                    } else {
-                        // TO-DO Log error
-                        console.log(error);
-                        this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
-                        return;
-                    }
-                }
-
-                if(connResetOccurred) {
-                    try {
-                        await wait(this.stasherDelay);
-                        await this.fetchPair(pair, false);
-                    } catch(error) {
-                        console.log(`The second attempt of fetching the file has ended with error. URL: ${pair.file.url}`);
-                        console.log(error);
-                        this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
-                        return;
-                    }
-                }
-
-
-                if(pair.file.notFound) {
-                    this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
-                } else {
-                    let obj = {};
-                    obj.pair = pair;
-                    obj.timeout = setTimeout(() => {
-                        this.pairsStorage.splice(this.pairsStorage.indexOf(pair), 1);
-                        this.suspiciousTimeouts.splice(this.suspiciousTimeouts.indexOf(obj), 1);
-                    }, this.suspiciousInterval);
-
-                    this.suspiciousTimeouts.push(obj);
-                }
-            };
-    
-            // Starter.
-            let recursiveTimer = async () => {
-                this.stasherRunning && await suspicious();
-                this.stasherRunning && await wait(this.stasherDelay);
-                this.stasherRunning && recursiveTimer();
-            };
-
-            this.stasherRunning = true;
-            setTimeout(recursiveTimer, this.stasherDelay);
-        };
-
-        if(mode === 'slave') slaveMode();
-        if(mode === 'all-in') allInMode();
-        if(mode === 'suspicious') suspiciousMode();
+        if(mode === 'web') this._webMode();
+        if(mode === 'all-in') this._allInMode();
+        if(mode === 'suspicious') this._suspiciousMode();
     };
-
 
     /**
      * Stop the stasher service.
      */
     stopStasher() {
-        if(this.mode === 'slave') {
-
+        if(this.mode === 'web') {
+            this.stasherRunning = false;
+            this.threadsObserverService.removeListener(FileCreateEvent.name, this.fileCreateHandler);
         } else if(this.mode === 'all-in') {
             this.stasherRunning = false;
             this.threadsObserverService.removeListener(FileCreateEvent.name, this.fileCreateHandler);
@@ -276,35 +466,37 @@ class FileStasherService extends EventEmitter {
                 clearTimeout(timeoutObj.timeout);
             });
         }
+
+        this.database = null;
     };
 
 
 
-    // #######################
-    // Pairs Storage Interface
-    // #######################
+    // #################
+    // Storage Interface
+    // #################
 
     /**
-     * Get the first StashPair with a file that is not fetched.
-     * @returns {StashPair | null}
+     * Get a first StashFile from the storage, that is not fetched.
+     * @returns {StashFile | null}
      */
-    getFirstNotFetchedPair() {
-        for(let i = 0; i < this.pairsStorage.length; i++) {
-            if(!this.pairsStorage[i].file.isFetched && !this.pairsStorage[i].file.notFound) {
-                return this.pairsStorage[i];
+    getFirstNotFetchedFile() {
+        for(let i = 0; i < this.files.length; i++) {
+            if(!this.files[i].isFetched && !this.files[i].notFound) {
+                return this.files[i];
             }
         }
         return null;
     };
 
     /**
-     * Get suspicious timeout object by file.
-     * @param {File} file 
-     * @returns {Object | null}
+     * Get a suspicious timeout object by url.
+     * @param {string} url 
+     * @returns {object | null}
      */
-    getSuspiciousTimeoutByFile(file) {
+    getSuspiciousTimeoutByUrl(url) {
         for(let i = 0; i < this.suspiciousTimeouts.length; i++) {
-            if(this.suspiciousTimeouts[i].pair.file.url === file.url) {
+            if(this.suspiciousTimeouts[i].file.url === url) {
                 return this.suspiciousTimeouts[i];
             }
         }
@@ -317,7 +509,7 @@ class FileStasherService extends EventEmitter {
     // #####################
 
     /**
-     * 
+     * Probe if the output path exists, and create a new one if no.
      */
     async checkOutputDir() {
         await fsp.mkdir(this.outputDir, {recursive: true});

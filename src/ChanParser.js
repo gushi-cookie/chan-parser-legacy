@@ -15,9 +15,11 @@ class ChanParser {
     constructor() {
         require('dotenv').config();
 
+        process.database = null;
+
         this.databaseService = new DatabaseService();
         this.threadsObserverService = new ThreadsObserverService();
-        this.fileStasherService = new FileStasherService(this.threadsObserverService, true, '/home/node/output', false, 600000);
+        this.fileStasherService = new FileStasherService(this.threadsObserverService, true, '/home/node/output', 600000);
         this.webService = new WebService();
 
 
@@ -45,7 +47,7 @@ class ChanParser {
 
         await this.databaseService.startDatabase();
         await this.threadsObserverService.startCatalogObserver();
-        this.fileStasherService.startStasher('suspicious');
+        this.fileStasherService.startStasher('web');
         await this.webService.startService();
     };
 
@@ -58,7 +60,7 @@ class ChanParser {
         await this.threadsObserverService.stopCatalogObserver();
         await this.databaseService.stopDatabase();
 
-        process.database = undefined;
+        process.database = null;
     };
 };
 
