@@ -38,9 +38,9 @@ function toCatalogFile(stored) {
         id: stored.id,
         listIndex: stored.listIndex,
         url: 
-            stored.extension ? `/cdn/file/${id}/${stored.cdnName}.${stored.extension}` : null,
+            stored.extension ? `/cdn/file/${stored.id}/${stored.cdnName}.${stored.extension}` : null,
         thumbnailUrl: 
-            stored.extension ? `/cdn/thumbnail/${id}/${stored.cdnName}.${stored.extension}` : null,
+            stored.extension ? `/cdn/thumbnail/${stored.id}/${stored.cdnName}_s.png` : null,
     };
 };
 
