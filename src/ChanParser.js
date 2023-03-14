@@ -34,7 +34,7 @@ class ChanParser {
         });
 
         setInterval(() => {
-            console.log('S ' + this.threadsObserverService.threads.length);
+            console.log(`S ${this.threadsObserverService.threads.length} | SF ${this.fileStasherService.files.length}`);
         }, 3000);
     };
 

@@ -116,7 +116,7 @@ Thread card classes
 
 .thread-card-head {
     padding: 10px;
-    
+    text-align: center;
 }
 
 .thread-card-head a {
@@ -124,7 +124,8 @@ Thread card classes
 }
 
 .thread-card-head img {
-    width: 100%;
+    max-width: 220px;
+    max-height: 220px;
 }
 
 .thread-card-meta {

@@ -9,6 +9,7 @@ const EventEmitter = require('node:events');
 const StashFile = require('./commons/StashFile');
 const FileCreateEvent = require('../threads-observer-service/events/FileCreateEvent');
 const FileDeleteEvent = require('../threads-observer-service/events/FileDeleteEvent');
+const ThreadCreateEvent = require('../threads-observer-service/events/ThreadCreateEvent');
 const ThreadDeleteEvent = require('../threads-observer-service/events/ThreadDeleteEvent');
 
 
@@ -52,6 +53,7 @@ class FileStasherService extends EventEmitter {
         this.fileCreateHandler = () => {};
         this.fileDeleteHandler = () => {};
         this.threadDeleteHandler = () => {};
+        this.threadCreateHandler = () => {};
     };
 
 
@@ -196,8 +198,18 @@ class FileStasherService extends EventEmitter {
             this.files.push(StashFile.makeFromObserverFile(event.file, this.outputDir, event.thread.number.toString()));
         };
 
+        let threadCreateHandler = (/**@type {ThreadCreateEvent}*/ event) => {
+            event.thread.posts.forEach(post => {
+                post.files.forEach(file => {
+                    this.files.push(StashFile.makeFromObserverFile(file, this.outputDir, event.thread.number.toString()));
+                });
+            });
+        };
+
         this.fileCreateHandler = fileCreateHandler;
+        this.threadCreateHandler = threadCreateHandler;
         this.threadsObserverService.on(FileCreateEvent.name, fileCreateHandler);
+        this.threadsObserverService.on(ThreadCreateEvent.name, threadCreateHandler);
 
         let web = async () => {
             let file = this.getFirstNotFetchedFile();
@@ -241,6 +253,9 @@ class FileStasherService extends EventEmitter {
                     storedFile.data = file.buffer;
                     storedFile.thumbnailData = await this._createThumbnail(file.fileExtension, file.buffer);
                     await this.database.fileQueries.updateFile(storedFile, ['extension', 'data', 'thumbnailData']);
+                } else {
+                    // TO-DO Log
+                    console.log(`#### File '${file.fileName}' ${file.url} is either already stored in the database or not stored at all.`);
                 }
             } catch(error) {
                 this._handleDatabaseErrors(error);
@@ -453,6 +468,7 @@ class FileStasherService extends EventEmitter {
         if(this.mode === 'web') {
             this.stasherRunning = false;
             this.threadsObserverService.removeListener(FileCreateEvent.name, this.fileCreateHandler);
+            this.threadsObserverService.removeListener(ThreadCreateEvent.name, this.threadCreateHandler);
         } else if(this.mode === 'all-in') {
             this.stasherRunning = false;
             this.threadsObserverService.removeListener(FileCreateEvent.name, this.fileCreateHandler);
