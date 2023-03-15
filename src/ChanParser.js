@@ -19,7 +19,7 @@ class ChanParser {
 
         this.databaseService = new DatabaseService();
         this.threadsObserverService = new ThreadsObserverService();
-        this.fileStasherService = new FileStasherService(this.threadsObserverService, true, '/home/node/output', 600000);
+        this.fileStasherService = new FileStasherService(this.threadsObserverService, '/home/node/output', 600000);
         this.webService = new WebService();
 
 
@@ -46,8 +46,8 @@ class ChanParser {
         process.database = this.databaseService;
 
         await this.databaseService.startDatabase();
-        await this.threadsObserverService.startCatalogObserver();
         this.fileStasherService.startStasher('web');
+        await this.threadsObserverService.startCatalogObserver();
         await this.webService.startService();
     };
 
@@ -56,8 +56,8 @@ class ChanParser {
      */
     async stop() {
         await this.webService.stopService();
-        this.fileStasherService.stopStasher();
         await this.threadsObserverService.stopCatalogObserver();
+        this.fileStasherService.stopStasher();
         await this.databaseService.stopDatabase();
 
         process.database = null;

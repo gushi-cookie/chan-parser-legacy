@@ -9,6 +9,7 @@ const EventEmitter = require('node:events');
 const StashFile = require('./commons/StashFile');
 const FileCreateEvent = require('../threads-observer-service/events/FileCreateEvent');
 const FileDeleteEvent = require('../threads-observer-service/events/FileDeleteEvent');
+const FileDBFetchEvent = require('../threads-observer-service/events/FileDBFetchEvent');
 const ThreadCreateEvent = require('../threads-observer-service/events/ThreadCreateEvent');
 const ThreadDeleteEvent = require('../threads-observer-service/events/ThreadDeleteEvent');
 
@@ -21,11 +22,10 @@ class FileStasherService extends EventEmitter {
     /**
      * Create an instance of the FileStasherService class.
      * @param {ThreadsObserverService} threadsObserverService Vital service.
-     * @param {boolean} stashFreshFilesOnly Should only new files be stashed.
      * @param {string} outputDir Path to a directory where to write StashFiles. No '/' in the end.
      * @param {number} suspiciousInterval Interval in milliseconds for the suspicious mode.
      */
-    constructor(threadsObserverService, stashFreshFilesOnly, outputDir, suspiciousInterval) {
+    constructor(threadsObserverService, outputDir, suspiciousInterval) {
         super();
 
         if(outputDir[outputDir.length-1] === '/') {
@@ -40,7 +40,6 @@ class FileStasherService extends EventEmitter {
 
         /** @type {Array.<StashFile>} */ this.files = [];
 
-        /** @type {boolean} */ this.stashFreshFilesOnly = stashFreshFilesOnly;
         /** @type {string}  */ this.outputDir = outputDir;
         /** @type {number}  */ this.suspiciousInterval = suspiciousInterval;
         /** @type {Array.<Object>} */ this.suspiciousTimeouts = [];
@@ -52,6 +51,7 @@ class FileStasherService extends EventEmitter {
 
         this.fileCreateHandler = () => {};
         this.fileDeleteHandler = () => {};
+        this.fileDBFetchHandler = () => {};
         this.threadDeleteHandler = () => {};
         this.threadCreateHandler = () => {};
     };
@@ -88,58 +88,6 @@ class FileStasherService extends EventEmitter {
         console.log(error);
     };
 
-
-    /**
-     * Fetch all stored files from the ThreadsObserverService and return them.
-     * 
-     * Note: this method works only when stasherRunning is set to true.
-     * @param {boolean} databaseCorrelate Check if a file already stored in the database, before fetching it.
-     * @param {boolean} flushOnly If true then a file will be flushed instantly after a successful fetch. Nothing will be in the return.
-     * @returns {Promise.<StashFile | undefined>}
-     */
-    async _fetchStaleFiles(databaseCorrelate, flushOnly) {
-        let threads = this.threadsObserverService.slice();
-
-        let stashFiles = [];
-        let stashFile;
-        let threadFiles;
-        let storedFile;
-        for(let i = 0; i < threads.length; i++) {
-            if(!this.stasherRunning) return stashFiles;
-            threadFiles = threads[i].getFiles();
-
-            for(let j = 0; j < threadFiles.length; j++) {
-                if(!this.stasherRunning) return stashFiles;
-                stashFile = StashFile.makeFromObserverFile(threadFiles[j], this.outputDir, threads[i].number.toString());
-
-                if(databaseCorrelate) {
-                    try {
-                        // storedFile = await this.database.fileQueries.selectFileByUrl(stashFile.url, false);
-                        if(storedFile !== null && storedFile.extension !== null) continue;
-                    } catch(error) {
-                        this._handleDatabaseErrors(error);
-                        continue;
-                    }
-                }
-
-                try {
-                    await stashFile.fetchFile();
-                    await this._wait(this.stasherDelay);
-                    if(flushOnly) {
-                        await stashFile.flush(true);
-                    } else {
-                        stashFiles.push(stashFile);
-                    }
-                } catch(error) {
-                    this._handleFetchErrors(error);
-                }
-            }
-        }
-
-        if(!flushOnly) {
-            return stashFiles;
-        }
-    };
 
     /**
      * Create thumbnail from a image or a video, represented in a buffer.
@@ -198,6 +146,12 @@ class FileStasherService extends EventEmitter {
             this.files.push(StashFile.makeFromObserverFile(event.file, this.outputDir, event.thread.number.toString()));
         };
 
+        let fileDBFetchHandler = (/**@type {FileDBFetchEvent} */ event) => {
+            if(event.storedFile.extension === null) {
+                this.files.push(StashFile.makeFromObserverFile(event.file, this.outputDir, event.thread.number.toString()));
+            }
+        };
+
         let threadCreateHandler = (/**@type {ThreadCreateEvent}*/ event) => {
             event.thread.posts.forEach(post => {
                 post.files.forEach(file => {
@@ -207,8 +161,10 @@ class FileStasherService extends EventEmitter {
         };
 
         this.fileCreateHandler = fileCreateHandler;
+        this.fileDBFetchHandler = fileDBFetchHandler;
         this.threadCreateHandler = threadCreateHandler;
         this.threadsObserverService.on(FileCreateEvent.name, fileCreateHandler);
+        this.threadsObserverService.on(FileDBFetchEvent.name, fileDBFetchHandler);
         this.threadsObserverService.on(ThreadCreateEvent.name, threadCreateHandler);
 
         let web = async () => {
@@ -289,9 +245,6 @@ class FileStasherService extends EventEmitter {
         this.fileCreateHandler = fileCreateHandler;
         this.threadsObserverService.on(FileCreateEvent.name, fileCreateHandler);
 
-        // if(!this.stashFreshFilesOnly) {
-        //     this._fetchStaleFiles(false, true);
-        // }
 
         let allIn = async () => {
             let file = this.getFirstNotFetchedFile();
@@ -468,6 +421,7 @@ class FileStasherService extends EventEmitter {
         if(this.mode === 'web') {
             this.stasherRunning = false;
             this.threadsObserverService.removeListener(FileCreateEvent.name, this.fileCreateHandler);
+            this.threadsObserverService.removeListener(FileDBFetchEvent.name, this.fileDBFetchHandler);
             this.threadsObserverService.removeListener(ThreadCreateEvent.name, this.threadCreateHandler);
         } else if(this.mode === 'all-in') {
             this.stasherRunning = false;
