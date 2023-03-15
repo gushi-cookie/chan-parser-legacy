@@ -80,6 +80,20 @@ class Thread {
     };
 
     /**
+     * Get a post by its id.
+     * @param {number} id Id of the post.
+     * @returns {Post | null} 
+     */
+    getPostById(id) {
+        for(let i = 0; i < this.posts.length; i++) {
+            if(this.posts[i].id === id) {
+                return this.posts[i];
+            }
+        }
+        return null;
+    };
+
+    /**
      * Computes files amount in the thread.
      * @returns {number} Files amount.
      */

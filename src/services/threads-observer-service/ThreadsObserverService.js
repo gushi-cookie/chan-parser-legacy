@@ -9,14 +9,17 @@ const StoredFile = require('../database-service/commons/StoredFile');
 const ThreadCreateEvent = require('./events/ThreadCreateEvent');
 const ThreadDeleteEvent = require('./events/ThreadDeleteEvent');
 const ThreadModifyEvent = require('./events/ThreadModifyEvent');
+const ThreadDBFetchEvent = require('./events/ThreadDBFetchEvent');
 const ThreadNotFoundEvent = require('./events/ThreadNotFoundEvent');
+const PostReplyEvent = require('./events/PostReplyEvent');
 const PostCreateEvent = require('./events/PostCreateEvent');
 const PostDeleteEvent = require('./events/PostDeleteEvent');
 const PostModifyEvent = require('./events/PostModifyEvent');
-const PostReplyEvent = require('./events/PostReplyEvent');
+const PostDBFetchEvent = require('./events/PostDBFetchEvent');
 const FileCreateEvent = require('./events/FileCreateEvent');
 const FileDeleteEvent = require('./events/FileDeleteEvent');
 const FileModifyEvent = require('./events/FileModifyEvent');
+const FileDBFetchEvent = require('./events/FileDBFetchEvent');
 
 
 
@@ -194,26 +197,54 @@ class ThreadsObserverService extends EventEmitter {
      * @throws {SQLiteError}
      */
     async _getStoredThreads() {
+        // The method fires sequently these events:
+        // ThreadDBFetchEvent -> PostDBFetchEvent -> FileDBFetchEvent.
+        // First goes a Thread event, then go all Post events and then go all File events.
+        // Events are fired before adding the thread in the storage.
+
+
         let unwrapTree = (tree) => {
-            let posts = new Array();
             let files = new Map();
+            let posts = new Array();
 
             tree.files.forEach((storedFile) => {
                 if(!files.has(storedFile.postId)) {
                     files.set(storedFile.postId, []);
                 }
-                files.get(storedFile.postId).push(storedFile.toObserverFile());
+                files.get(storedFile.postId).push({file: storedFile.toObserverFile(), storedFile});
             });
 
             tree.posts.forEach((storedPost) => {
                 if(files.has(storedPost.id)) {
-                    posts.push(storedPost.toObserverPost(files.get(storedPost.id)));
+                    posts.push({
+                        post: storedPost.toObserverPost(files.get(storedPost.id).map(fileObj => fileObj.file)),
+                        storedPost,
+                    });
                 } else {
-                    posts.push(storedPost.toObserverPost([]));
+                    posts.push({
+                        post: storedPost.toObserverPost([]),
+                        storedPost,
+                    });
                 }
             });
 
-            return tree.thread.toObserverThread(posts);
+
+            let thread = tree.thread.toObserverThread(posts.map(postObj => postObj.post));
+            this.emit(ThreadDBFetchEvent.name, new ThreadDBFetchEvent(thread, tree.thread));
+
+            posts.forEach(postObj => {
+                this.emit(PostDBFetchEvent.name, new PostDBFetchEvent(thread, postObj.post, postObj.storedPost));
+            });
+
+            let post;
+            files.forEach((postFiles, postId) => {
+                post = thread.getPostById(postId);
+                postFiles.forEach(fileObj => {
+                    this.emit(FileDBFetchEvent.name, new FileDBFetchEvent(thread, post, fileObj.file, fileObj.storedFile));
+                });
+            });
+            
+            return thread;
         };
 
         let headers = await this.database.threadQueries.selectThreads(this.imageBoard, this.board, false);
