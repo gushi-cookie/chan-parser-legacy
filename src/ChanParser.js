@@ -2,6 +2,7 @@ const ThreadsObserverService = require('./services/threads-observer-service/Thre
 const FileStasherService = require('./services/file-stasher-service/FileStasherService');
 const WebService = require('./services/web-service/WebService');
 const DatabaseService = require('./services/database-service/DatabaseService');
+const LogService = require('./services/LogService');
 
 
 /**
@@ -17,6 +18,7 @@ class ChanParser {
 
         process.database = null;
 
+        this.logService = new LogService('info');
         this.databaseService = new DatabaseService();
         this.threadsObserverService = new ThreadsObserverService();
         this.fileStasherService = new FileStasherService(this.threadsObserverService, '/home/node/output', 600000);

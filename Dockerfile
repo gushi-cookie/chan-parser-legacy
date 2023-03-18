@@ -4,6 +4,6 @@ WORKDIR /app
 EXPOSE 8080/tcp
 
 RUN apt update
-RUN apt -y install ffmpegthumbnailer
+RUN apt -y install ffmpegthumbnailer tzdata
 
 CMD node ./index.js

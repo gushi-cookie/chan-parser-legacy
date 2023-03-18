@@ -1,6 +1,11 @@
 #!/bin/bash
 
+set -o allexport
+source .env
+set +o allexport
+
 declare empty_node_container=false
+
 
 while getopts "e" opt; do
     case ${opt} in
@@ -25,6 +30,7 @@ if [[ $empty_node_container == "true" ]]; then
 else
     sudo -H -u \#1000 bash -c "mkdir -p /dev/shm/chan_parser"
     docker run  -it --rm \
+                -e TZ=$TIMEZONE \
                 --user 1000:1000 \
                 --volume $(pwd):/app \
                 --volume /dev/shm/chan_parser:/home/node/output \
