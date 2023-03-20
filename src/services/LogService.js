@@ -19,8 +19,9 @@ class LogService {
         this.logger = winston.createLogger({
             level,
             transports: [
-                new winston.transports.Console({ format: LogService._createPrettyFormat(true, this.depth) }),
+                new winston.transports.Console({ level, format: LogService._createPrettyFormat(true, this.depth) }),
                 new winston.transports.File({
+                    level: 'http',
                     format: LogService._createPrettyFormat(false, this.depth),
                     filename: `${this.outputPath}/workflow.log`,
                 }),
@@ -46,10 +47,11 @@ class LogService {
                     if(s.description === 'message') message = info[s];
                 });
 
+                let prefix = info.servicePrefix ? `[${info.servicePrefix}] ` : '';
                 let stack = info.stack ? `\n${info.stack}` : '';
                 if(typeof info.message === 'object') info.message = '\n' + util.inspect(info.message, false, depth, colorize);
-console.log(info);
-                return `[${info.timestamp}] ${info.level} (${info.pid}): ${info.message}${stack}`;
+
+                return `[${info.timestamp}]${prefix}${info.level} (${info.pid}): ${info.message}${stack}`;
             }),
         ];
         if(colorize) formats.unshift(winston.format.colorize());

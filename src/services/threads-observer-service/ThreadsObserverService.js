@@ -29,9 +29,12 @@ const FileDBFetchEvent = require('./events/FileDBFetchEvent');
 class ThreadsObserverService extends EventEmitter {
     /**
      * Create an instance of the ThreadsObserverService class.
+     * @param {import('winston').Logger} logger Winston's logger.
      */
-    constructor() {
+    constructor(logger) {
         super();
+
+        this.logger = logger;
 
         /** @type {import('../database-service/DatabaseService')} */
         this.database = null;
@@ -293,7 +296,7 @@ class ThreadsObserverService extends EventEmitter {
         try {
             post.id = await this.database.postQueries.insertPost(StoredPost.makeFromObserverPost(post, threadId));
         } catch(error) {
-            this._handleDatabaseErrors(error);
+            this.logger.error(error);
             return false;
         }
         return true;
@@ -310,7 +313,7 @@ class ThreadsObserverService extends EventEmitter {
         try {
             file.id = await this.database.fileQueries.insertFile(StoredFile.makeFromObserverFile(file, postId));
         } catch(error) {
-            this._handleDatabaseErrors(error);
+            this.logger.error(error);
             return false;
         }
         return true;
@@ -329,7 +332,7 @@ class ThreadsObserverService extends EventEmitter {
             fields.push('postsCount', 'filesCount');
             await this.database.threadQueries.updateThread(sThread, fields);
         } catch(error) {
-            this._handleDatabaseErrors(error);
+            this.logger.error(error);
             return false;
         }
         return true;
@@ -347,7 +350,7 @@ class ThreadsObserverService extends EventEmitter {
         try {
             await this.database.postQueries.updatePost(sPost, fields);
         } catch(error) {
-            this._handleDatabaseErrors(error);
+            this.logger.error(error);
             return false;
         }
         return true;
@@ -365,7 +368,7 @@ class ThreadsObserverService extends EventEmitter {
         try {
             await this.database.fileQueries.updateFile(sFile, fields);
         } catch(error) {
-            this._handleDatabaseErrors(error);
+            this.logger.error(error);
             return false;
         }
         return true;
@@ -376,24 +379,6 @@ class ThreadsObserverService extends EventEmitter {
     // #########################
     // Catalog observer controls
     // #########################
-
-    /**
-     * Work with an axios error.
-     * @param {AxiosError} error 
-     */
-    _handleFetchErrors(error) {
-        // TO-DO Log error
-        console.log(error.message);
-    };
-
-    /**
-     * Work with an sqlite error.
-     * @param {SQLiteError} error 
-     */
-    _handleDatabaseErrors(error) {
-        // TO-DO Log error
-        console.log(error);
-    };
 
     /**
      * Delay a current thread (current code execution).
@@ -494,8 +479,7 @@ class ThreadsObserverService extends EventEmitter {
             postsDiff = postArraysDiff.differences[i];
 
             if(postsDiff.post1.isDeleted) {
-                // TO-DO Log
-                console.log('Post has rose from the dead!');
+                this.logger.warn(`Post has rose from the dead! Id: ${postsDiff.post1.id}`);
             }
 
             if(postsDiff.fields.length > 0) {
@@ -539,7 +523,7 @@ class ThreadsObserverService extends EventEmitter {
         try {
             fetchedThread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, thread.number);
         } catch(error) {
-            this._handleFetchErrors(error);
+            this.logger.error(error);
             return;
         }
 
@@ -585,13 +569,12 @@ class ThreadsObserverService extends EventEmitter {
         try {
             catalog = await ThreadsObserverService.fetchCatalog(this.imageBoard, this.board);
         } catch(error) {
-            this._handleFetchErrors(error);
+            this.logger.error(error);
             return;
         }
 
         if(catalog === 404) {
-            // TO-DO Log 404
-            console.log('Catalog fetch 404');
+            this.logger.warn('Catalog fetch 404.');
             return;
         }
 
@@ -633,7 +616,7 @@ class ThreadsObserverService extends EventEmitter {
                     thread = await ThreadsObserverService.fetchThread(this.imageBoard, this.board, catalogThread.number);
                     await this._wait(this.threadFetchDelay);
                 } catch(error) {
-                    this._handleFetchErrors(error);
+                    this.logger.error(error);
                     continue;
                 }
 
@@ -650,7 +633,7 @@ class ThreadsObserverService extends EventEmitter {
                 try {
                     await this._insertThreadTree(thread);
                 } catch(error) {
-                    this._handleDatabaseErrors(error);
+                    this.logger.error(error);
                     continue;
                 }
             }
@@ -678,12 +661,13 @@ class ThreadsObserverService extends EventEmitter {
      * Start catalog observer timers.
      */
     async startCatalogObserver() {
+        this.logger.info('Starting catalog observer.');
         this.database = process.database;
 
         try {
             await this._getStoredThreads();
         } catch(error) {
-            this._handleDatabaseErrors(error);
+            this.logger.error(error);
         }
 
         // Starter.
@@ -701,6 +685,7 @@ class ThreadsObserverService extends EventEmitter {
      * Stop catalog observer timers.
      */
     async stopCatalogObserver() {
+        this.logger.info('Stopping catalog observer.');
         this.catalogObserverRunning = false;
     };
 };

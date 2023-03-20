@@ -17,6 +17,7 @@ class App {
 
         this.app = express();
         this.server = null;
+        /**@type {import('winston').Logger} */ this.logger = null;
     };
 
     
@@ -24,6 +25,8 @@ class App {
      * Initialize express app and run it.
      */
     async startServer() {
+        this.logger = process.webLogger;
+
         let app = this.app;
         app.set('view engine', 'ejs');
         app.use('/public', express.static(`${this.appPath}/public`), serveIndex(`${this.appPath}/public`, {icons: true}));
@@ -35,11 +38,10 @@ class App {
         return new Promise((resolve) => {
             this.server = this.app.listen(this.port, (error) => {
                 if(error) throw error;
-                console.log(`App started on port ${this.port}.`);
+                this.logger.info(`App started on port ${this.port}.`);
                 resolve();
             });
         });
-        
     };
 
     /**
@@ -48,9 +50,8 @@ class App {
     async stopServer() {
         return new Promise((resolve) => {
             this.server.close((error) => {
-                // TO-DO Log.
                 if(error) throw error;
-                console.log('App has stopped.');
+                this.logger.info(`App has stopped.`);
                 resolve();
             });
         });

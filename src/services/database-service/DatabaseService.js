@@ -11,8 +11,11 @@ class DatabaseService {
 
     /**
      * Create an instance of the DatabaseService class.
+     * @param {import('winston').Logger} logger Winston's logger.
      */
-    constructor() {
+    constructor(logger) {
+        this.logger = logger;
+
         this.database = null;
 
         this.fileQueries = null;
@@ -26,10 +29,11 @@ class DatabaseService {
      */
     async startDatabase() {
         await new Promise((resolve) => {
+            this.logger.info('Connecting to the database.');
             this.database = new sqlite3.Database(`${process.env.OUTPUT_PATH}/result.db`,
             (error) => {
                 if(error) throw error;
-                console.log('Successfully connected to the database.');
+                this.logger.info('Successfully connected to the database.');
                 resolve();
             });
         });
@@ -53,7 +57,7 @@ class DatabaseService {
         await new Promise((resolve) => {
             this.database.close((error) => {
                 if(error) throw error;
-                console.log('Database connection closed.');
+                this.logger.info('Database connection closed.');
                 resolve();
             });
         });

@@ -24,8 +24,9 @@ class FileStasherService extends EventEmitter {
      * @param {ThreadsObserverService} threadsObserverService Vital service.
      * @param {string} outputDir Path to a directory where to write StashFiles. No '/' in the end.
      * @param {number} suspiciousInterval Interval in milliseconds for the suspicious mode.
+     * @param {import('winston').Logger} logger Winston's logger.
      */
-    constructor(threadsObserverService, outputDir, suspiciousInterval) {
+    constructor(threadsObserverService, outputDir, suspiciousInterval, logger) {
         super();
 
         if(outputDir[outputDir.length-1] === '/') {
@@ -44,6 +45,7 @@ class FileStasherService extends EventEmitter {
         /** @type {number}  */ this.suspiciousInterval = suspiciousInterval;
         /** @type {Array.<Object>} */ this.suspiciousTimeouts = [];
 
+        this.logger = logger;
 
         this.mode = null;
         this.stasherRunning = false;
@@ -69,25 +71,6 @@ class FileStasherService extends EventEmitter {
     async _wait(delay) {
         return new Promise((resolve) => { setTimeout(resolve, delay); });
     };
-
-    /**
-     * Work with an axios error.
-     * @param {AxiosError} error 
-     */
-    _handleFetchErrors(error) {
-        // TO-DO Log error
-        console.log(error.message);
-    };
-
-    /**
-     * Work with a sqlite error.
-     * @param {SQLiteError} error 
-     */
-    _handleDatabaseErrors(error) {
-        // TO-DO Log error
-        console.log(error);
-    };
-
 
     /**
      * Create thumbnail from a image or a video, represented in a buffer.
@@ -176,10 +159,11 @@ class FileStasherService extends EventEmitter {
                 await file.fetchFile();
             } catch(error) {
                 if(error.code === 'ECONNRESET') {
-                    console.log(`Error 'ECONNRESET' occurred. URL: ${file.url}. Second attempt to fetch the file.`);
+                    this.logger.error(`Error 'ECONNRESET' occurred. URL: ${file.url}. Second attempt to fetch the file.`);
+                    this.logger.error(error);
                     connResetOccurred = true;
                 } else {
-                    this._handleDatabaseErrors(error);
+                    this.logger.error(error);
                     this.files.splice(this.files.indexOf(file), 1);
                     return;
                 }
@@ -190,14 +174,15 @@ class FileStasherService extends EventEmitter {
                     await this._wait(this.stasherDelay);
                     await file.fetchFile();
                 } catch(error) {
-                    console.log(`The second attempt of fetching the file has ended with error. URL: ${file.url}`);
-                    console.log(error);
+                    this.logger.error(`The second attempt of fetching the file has ended with error. URL: ${file.url}`);
+                    this.logger.error(error);
                     this.files.splice(this.files.indexOf(file), 1);
                     return;
                 }
             }
             
             if(file.notFound) {
+                this.logger.warn(`Couldn't fetch file ${file.url} due to 404.`);
                 this.files.splice(this.files.indexOf(file), 1);
                 return;
             }
@@ -209,12 +194,12 @@ class FileStasherService extends EventEmitter {
                     storedFile.data = file.buffer;
                     storedFile.thumbnailData = await this._createThumbnail(file.fileExtension, file.buffer);
                     await this.database.fileQueries.updateFile(storedFile, ['extension', 'data', 'thumbnailData']);
+                    this.logger.verbose(`Stored a new file: /cdn/file/${storedFile.id}/${storedFile.cdnName}.${storedFile.extension}`);
                 } else {
-                    // TO-DO Log
-                    console.log(`#### File '${file.fileName}' ${file.url} is either already stored in the database or not stored at all.`);
+                    this.logger.warn(`File '${file.fileName}' ${file.url} is either already stored in the database or not stored at all. Ignoring it.`);
                 }
             } catch(error) {
-                this._handleDatabaseErrors(error);
+                this.logger.error(error);
             }
 
             this.files.splice(this.files.indexOf(file), 1);
@@ -229,6 +214,7 @@ class FileStasherService extends EventEmitter {
 
         this.stasherRunning = true;
         setTimeout(recursiveTimer, this.stasherDelay);
+        this.logger.info('Web timer has started.');
     };
 
     /**
@@ -253,14 +239,19 @@ class FileStasherService extends EventEmitter {
             let connResetOccurred = false;
             try {
                 await file.fetchFile();
-                await file.flush(true);
+                if(file.notFound) {
+                    this.logger.warn(`File ${file.fileName}.${file.extension} couldn't be fetched due to 404. ${file.url}`);
+                } else {
+                    this.logger.verbose(`Fetched a new file: ${file.fileName}.${file.extension}`);
+                    await file.flush(true);
+                }
             } catch(error) {
                 if(error.code === 'ECONNRESET') {
-                    console.log(`Error 'ECONNRESET' occurred. URL: ${file.url}. Second attempt to fetch the file.`);
+                    this.logger.error(`Error 'ECONNRESET' occurred. URL: ${file.url}. Second attempt to fetch the file.`);
+                    this.logger.error(error);
                     connResetOccurred = true;
                 } else {
-                    // TO-DO Log error
-                    console.log(error);
+                    this.logger.error(error);
                     this.files.splice(this.files.indexOf(file), 1);
                     return;
                 }
@@ -270,10 +261,15 @@ class FileStasherService extends EventEmitter {
                 try {
                     await this._wait(this.stasherDelay);
                     await file.fetchFile();
-                    await file.flush(true);
+                    if(file.notFound) {
+                        this.logger.warn(`File ${file.fileName}.${file.extension} couldn't be fetched due to 404. ${file.url}`);
+                    } else {
+                        this.logger.verbose(`Fetched a new file: ${file.fileName}.${file.extension}`);
+                        await file.flush(true);
+                    }
                 } catch(error) {
-                    console.log(`The second attempt of fetching the file has ended with error. URL: ${file.url}`);
-                    console.log(error);
+                    this.logger.error(`The second attempt of fetching the file has ended with error. URL: ${file.url}`);
+                    this.logger.error(error);
                 }
             }
 
@@ -289,6 +285,7 @@ class FileStasherService extends EventEmitter {
 
         this.stasherRunning = true;
         setTimeout(recursiveTimer, this.stasherDelay);
+        this.logger.info('All-in timer has started.');
     };
 
     /**
@@ -346,11 +343,11 @@ class FileStasherService extends EventEmitter {
                 await file.fetchFile();
             } catch(error) {
                 if(error.code === 'ECONNRESET') {
-                    console.log(`Error 'ECONNRESET' occurred. URL: ${file.url}. Second attempt to fetch the file.`);
+                    this.logger.error(`Error 'ECONNRESET' occurred. URL: ${file.url}. Second attempt to fetch the file.`);
+                    this.logger.error(error);
                     connResetOccurred = true;
                 } else {
-                    // TO-DO Log error
-                    console.log(error);
+                    this.logger.error(error);
                     this.files.splice(this.files.indexOf(file), 1);
                     return;
                 }
@@ -361,8 +358,8 @@ class FileStasherService extends EventEmitter {
                     await this._wait(this.stasherDelay);
                     await file.fetchFile();
                 } catch(error) {
-                    console.log(`The second attempt of fetching the file has ended with error. URL: ${file.url}`);
-                    console.log(error);
+                    this.logger.error(`The second attempt of fetching the file has ended with error. URL: ${file.url}`);
+                    this.logger.error(error);
                     this.files.splice(this.files.indexOf(file), 1);
                     return;
                 }
@@ -370,8 +367,10 @@ class FileStasherService extends EventEmitter {
 
 
             if(file.notFound) {
+                this.logger.warn(`Couldn't fetch file ${file.url} due to 404.`);
                 this.files.splice(this.files.indexOf(file), 1);
             } else {
+                this.logger.verbose(`Fetched a new file: ${file.fileName}.${file.extension}. Combining it with a timer.`);
                 let obj = {};
                 obj.file = file;
                 obj.timeout = setTimeout(() => {
@@ -392,6 +391,7 @@ class FileStasherService extends EventEmitter {
 
         this.stasherRunning = true;
         setTimeout(recursiveTimer, this.stasherDelay);
+        this.logger.info('Suspicious timer has started.');
     };
 
 
@@ -400,12 +400,15 @@ class FileStasherService extends EventEmitter {
      * @param {string} mode available: slave, all-in, suspicious.
      */
     async startStasher(mode) {
+        this.logger.info(`Starting service in ${mode} mode.`);
+        
         if(!['web', 'all-in', 'suspicious'].includes(mode)) {
             throw new Error(`Mode: ${mode} is not supported.`);
         }
 
         this.database = process.database;
         this.mode = mode;
+        this.logger.info(`Checking output directory.`);
         await this.checkOutputDir();
         
 
@@ -418,6 +421,7 @@ class FileStasherService extends EventEmitter {
      * Stop the stasher service.
      */
     stopStasher() {
+        this.logger.info('Stopping service.');
         if(this.mode === 'web') {
             this.stasherRunning = false;
             this.threadsObserverService.removeListener(FileCreateEvent.name, this.fileCreateHandler);

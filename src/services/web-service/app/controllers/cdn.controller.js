@@ -5,14 +5,17 @@ const Stream = require('node:stream');
 /** @type {import('../../../database-service/DatabaseService')} */
 const database = process.database;
 
+/** @type {import('winston').Logger} */
+const logger = process.webLogger;
+
 
 const cdnFile = async (req, res) => {
     let file;
     try {
         file = await database.fileQueries.selectFileById(req.params.id, ['thumbnail_data']);
     } catch(error) {
-        console.log(error);
-        res.status(500).send('Database error has occurred, while working on the request! 505');
+        logger.error(error);
+        res.status(500).send('Database error has occurred, while working on the request! 500');
         return;
     }
 
@@ -39,8 +42,8 @@ const cdnThumbnail = async (req, res) => {
     try {
         file = await database.fileQueries.selectFileById(req.params.id, ['data']);
     } catch(error) {
-        console.log(error);
-        res.status(500).send('Database error has occurred, while working on the request! 505');
+        logger.error(error);
+        res.status(500).send('Database error has occurred, while working on the request! 500');
         return;
     }
 

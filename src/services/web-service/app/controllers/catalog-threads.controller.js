@@ -1,6 +1,9 @@
 /** @type {import('../../../database-service/DatabaseService')} */
 const database = process.database;
 
+/** @type {import('winston').Logger} */
+const logger = process.webLogger;
+
 
 function toCatalogThread(stored) {
     return {
@@ -96,8 +99,8 @@ const catalogThreadsGetApi = async (req, res) => {
             res.json({threads});
         }
     } catch(error) {
-        console.log(error);
-        res.status(500).send('Database error has occurred, while working on the request! 505');
+        logger.error(error);
+        res.status(500).send('Database error has occurred, while working on the request! 500');
     }
 };
 
@@ -113,8 +116,8 @@ const boardsListGetApi = async (req, res) => {
         let result = await database.threadQueries.selectBoards(imageBoard, board);
         res.json(result);
     } catch(error) {
-        console.log(error);
-        res.status(500).send('Database error has occurred, while working on the request! 505');
+        logger.error(error);
+        res.status(500).send('Database error has occurred, while working on the request! 500');
     }
 };
 
