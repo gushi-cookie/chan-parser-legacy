@@ -48,25 +48,22 @@ function toCatalogFile(stored) {
 };
 
 const catalogThreadsGetApi = async (req, res) => {
+    // GET: /api/catalog-threads[/:id] | [?imageBoard board]
     let imageBoard = req.query.imageBoard;
     let board = req.query.board;
-    let id = req.query.id;
+    let id = req.params.id;
 
     imageBoard = imageBoard ? imageBoard : null;
     board = board ? board : null;
-    id = Number(id);
-    if(req.query.id && Number.isNaN(id)) {
-        res.status(400).send('Parameter \'id\' has invalid value.');
-        return;
-    }
+    id = id ? id : null;
 
     let result;
     let object;
     try {
-         if(imageBoard && board && id) {
+         if(id) {
             object = {};
 
-            result = await database.threadQueries.selectThread(imageBoard, board, id);
+            result = await database.threadQueries.selectThread(id);
             if(result === null) {
                 res.status(404).send('Thread not found! 404');
                 return;

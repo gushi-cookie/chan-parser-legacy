@@ -254,7 +254,7 @@ class ThreadsObserverService extends EventEmitter {
 
         let tree;
         for(let i = 0; i < headers.length; i++) {
-            tree = await this.database.threadQueries.selectThreadTree(this.imageBoard, this.board, headers[i].id);
+            tree = await this.database.threadQueries.selectThreadTree(headers[i].id);
             this.threads.push(unwrapTree(tree));
         }
     };
