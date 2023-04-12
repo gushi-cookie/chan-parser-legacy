@@ -100,7 +100,7 @@ function formThreadCard(object) {
     /**@type {CatalogPost}  */ post = object.post,
     /**@type {CatalogFile}  */ file = object.file;
 
-    let threadPath = `/thread?imageBoard=${thread.imageBoard}&board=${thread.board}&id=${thread.id}`;
+    let threadPath = `/thread/${thread.id}`;
     let imagePath = file === null || file.thumbnailUrl === null ? '/public/media/image-not-found.png' : file.thumbnailUrl;
     let title = thread.title.length === 0 ? post.comment.replaceAll('<br>', ' ').slice(0, 100) : thread.title.replaceAll('<br>', ' ');
 
