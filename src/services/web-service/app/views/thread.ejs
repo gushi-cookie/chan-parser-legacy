@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link href="/public/media/favicon.png" rel="icon">
+
+    <link href="/public/css/normalize.css" rel="stylesheet">
+    <link href="/public/css/general.css" rel="stylesheet">
+    <link href="/public/css/thread.css" rel="stylesheet">
+
+    <script src="/public/js/axios.min.js"></script>
+    <script src="/public/js/general.js"></script>
+    <script src="/public/js/thread.js"></script>
+
+    <title>Some thread</title>
+</head>
+<body>
+    <div class="notifications-container"></div>
+    <div id="top"></div>
+    <div class="menu">
+        <a class="menu-catalog" href="/" target="_blank">Catalog</a>
+        <a class="menu-bottom" href="#bottom">Bottom</a>
+        <a class="menu-update">Update</a>
+        <label class="menu-auto-update">
+            <input class="menu-auto-update-checkbox" type="checkbox" title="Update thread automatically">
+            Auto update
+            <span class="menu-auto-update-timer"></span>
+        </label>
+        <div class="menu-stat">
+            <span class="menu-stat-posts" title="Posts in thread">
+                <img src="/public/media/chat-square-icon.svg">
+                <span>-</span>
+            </span>
+            <span class="menu-stat-images" title="Images in thread">
+                <img src="/public/media/image-icon.svg">
+                <span>-</span>
+            </span>
+            <span class="menu-stat-posters" title="Unique posters">
+                <img src="/public/media/people-icon.svg">
+                <span>-</span>
+            </span>
+        </div>
+    </div>
+
+    <div class="thread-container"></div>
+
+    <div class="menu">
+        <a class="menu-catalog" href="/" target="_blank">Catalog</a>
+        <a class="menu-top" href="#top">Top</a>
+        <a class="menu-update">Update</a>
+        <label class="menu-auto-update">
+            <input class="menu-auto-update-checkbox" type="checkbox" title="Update thread automatically">
+            Auto update
+            <span class="menu-auto-update-timer"></span>
+        </label>
+        <div class="menu-stat">
+            <span class="menu-stat-posts" title="Posts in thread">
+                <img src="/public/media/chat-square-icon.svg">
+                <span>-</span>
+            </span>
+            <span class="menu-stat-images" title="Images in thread">
+                <img src="/public/media/image-icon.svg">
+                <span>-</span>
+            </span>
+            <span class="menu-stat-posters" title="Unique posters">
+                <img src="/public/media/people-icon.svg">
+                <span>-</span>
+            </span>
+        </div>
+    </div>
+    <div id="bottom"></div>
+</body>
+</html>

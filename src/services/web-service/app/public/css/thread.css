@@ -1,0 +1,298 @@
+body {
+    font-family: trebuchet ms,sans-serif;
+    font-size: 15px;
+    line-height: 1.3;
+    color: #ccc;
+    padding: 0 5px;
+}
+
+/* Thread container */
+.thread {
+    display: flex;
+    flex-flow: column wrap;
+    align-items: flex-start;
+}
+
+.thread-deleted {
+
+}
+
+
+
+/* Post container */
+.post {
+    max-width: 75vw;
+    background-color: #192734;
+    border: 1px solid #38444d66;
+    border-radius: 3px;
+    position: relative;
+    margin: 2px 0 4px 20px;
+    padding: 4px;
+    overflow: visible;
+}
+
+.post-deleted {
+
+}
+
+.post-op {
+
+}
+
+.post-banned {
+
+}
+
+.post::before {
+    content: '...';
+    position: absolute;
+    left: -21px;
+    top: -5px;
+    color: #565656;
+}
+
+/* First post corrections */
+.post:first-child {
+    background-color: transparent;
+    border: none;
+    margin-left: 0;
+}
+
+.post:first-child::before {
+    display: none;
+}
+
+/* Post details */
+.post-details {
+    font-size: 0.9em;
+    color: #7d7d7d;
+}
+
+.post-title {
+    color: #6995c5;
+    font-size: 1.1em;
+    font-weight: 700;
+    padding: 0 12px 0 6px;
+}
+
+.post-ref-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.post-ref-link:hover {
+    color: #c3672a;
+}
+
+.post-number {
+    padding-left: 6px;
+    color: #789922;
+}
+
+/* Other */
+.post-files {
+    display: flex;
+    flex-flow: row wrap;
+    padding: 4px 0 0 16px;
+    float: left;
+}
+
+.post-files-multiple {
+    float: none;
+}
+
+.post-message {
+    padding: 0 16px 16px 0;
+    overflow: auto;
+    max-height: 600px;
+
+    word-break: break-word;
+    word-wrap: break-word;
+}
+
+.post-files-empty + .post-message {
+    padding-top: 16px;
+}
+
+.post-files-single + .post-message {
+    padding-top: 30px;
+}
+
+.post-files-multiple + .post-message {
+    padding-top: 16px;
+    padding-left: 16px;
+}
+
+.post-refs {
+    color: #c3672a;
+    cursor: pointer;
+    font-size: 0.8em;
+    padding: 0 16px 6px 16px;
+
+    word-break: break-word;
+    word-wrap: break-word;
+}
+
+.post-refs:hover {
+    color: #a74300;
+}
+
+
+
+/* File container */
+.file {
+    margin: 0;
+    margin-right: 16px;
+}
+
+/* File attrs */
+.file-attr {
+    color: #7d7d7d;
+    font-size: 0.8em;
+}
+
+.file-link {
+    color: #c3672a;
+    text-decoration: none;
+}
+
+.file-link:hover {
+    color: #a74300;
+}
+
+.file-meta {
+    display: block;
+}
+
+/* File image */
+.file-image-link {
+
+}
+
+.file-image {
+    width: 175px;
+}
+
+
+
+/* Menu container */
+.menu {
+    border-bottom: 1px solid #38444d66;
+    margin: 7px 0;
+    padding: 4px 0;
+
+    font-size: 0.9em;
+}
+
+.menu-catalog,
+.menu-bottom,
+.menu-top,
+.menu-update {
+    text-decoration: none;
+    color: #c3672a;
+    cursor: pointer;
+}
+
+.menu-auto-update::before,
+.menu-catalog::before,
+.menu-bottom::before,
+.menu-top::before,
+.menu-update::before {
+    content: '[';
+    color: #ccc;
+}
+
+.menu-auto-update::after,
+.menu-catalog::after,
+.menu-bottom::after,
+.menu-top::after,
+.menu-update::after {
+    content: ']';
+    color: #ccc;
+}
+
+.menu-catalog:hover,
+.menu-bottom:hover,
+.menu-top:hover,
+.menu-update:hover{
+    color: #a74300;
+}
+
+.menu-catalog {
+
+}
+
+.menu-bottom {
+
+}
+
+.menu-top {
+
+}
+
+.menu-update {
+
+}
+
+.menu-auto-update {
+    cursor: pointer;
+}
+
+.menu-auto-update input {
+    vertical-align: -2px;
+}
+
+.menu-auto-update-timer {
+    color: #ccc;
+}
+
+.menu-auto-update-timer:hover {
+    color: inherit;
+}
+
+
+.menu-stat {
+    display: inline;
+    margin-left: 7px;
+}
+
+.menu-stat > * {
+    cursor: pointer;
+}
+
+.menu-stat img {
+    width: 17px;
+    filter: contrast(0.22);
+}
+
+.menu-stat-posts img {
+    vertical-align: -5px;
+}
+
+.menu-stat-images img {
+    vertical-align: -4px;
+}
+
+.menu-stat-posters img {
+    vertical-align: -3px;
+}
+
+
+/* Notifications */
+.notifications-container {
+    display: flex;
+    flex-flow: row nowrap;
+
+    padding: 5px 5px 0 0;
+
+    position: fixed;
+    top: 0;
+    right: 0;
+
+    gap: 5px;
+}
+
+.notification {
+    background-color: #192734;
+    padding: 4px 8px;
+}

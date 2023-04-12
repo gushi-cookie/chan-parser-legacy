@@ -32,7 +32,7 @@ class App {
         app.use('/public', express.static(`${this.appPath}/public`), serveIndex(`${this.appPath}/public`, {icons: true}));
         app.use(require('./routes/cdn'));
         app.use(require('./routes/home'));
-        app.use(require('./routes/threads'));
+        app.use(require('./routes/thread'));
         app.use(require('./routes/catalog-threads'));
 
         return new Promise((resolve) => {
