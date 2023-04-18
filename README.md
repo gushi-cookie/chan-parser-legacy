@@ -2,7 +2,7 @@
 ChanParser is a tool for parsing, storing and displaying data from image boards. At this moment the parser can work only with 4chan and 2ch image boards.
 
 # Prerequisites
-`Docker` should be installed on your device, and you have access to`root` user, for running docker. This tool runs on `Linux OS` only.
+`Docker` should be installed on your device, and you have access to `root` user, for running docker. This tool runs on `Linux OS` only.
 
 # Installation
 1. Get the repository on your device
@@ -13,11 +13,20 @@ ChanParser is a tool for parsing, storing and displaying data from image boards.
    ```
    cd chan_parser
    ```
-3. Build a Docker image
+3. Build a docker image
    ```
    sudo ./build.sh
    ```
-4. Run the program
+4. Run an empty node container that binds to the current working directory
+   ```
+   sudo ./start.sh -e
+   ```
+5. Install project packages in the running container and then exit the container
+   ```
+   npm install
+   exit
+   ```
+6. Run the program
    ```
    sudo ./start.sh
    ```
